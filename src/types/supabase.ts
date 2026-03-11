@@ -1,194 +1,448 @@
 export type Json =
-    | string
-    | number
-    | boolean
-    | null
-    | { [key: string]: Json | undefined }
-    | Json[]
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
-export interface Database {
-    public: {
-        Tables: {
-            tenants: {
-                Row: {
-                    id: string
-                    name: string
-                    created_at: string
-                }
-                Insert: {
-                    id?: string
-                    name: string
-                    created_at?: string
-                }
-                Update: {
-                    id?: string
-                    name?: string
-                    created_at?: string
-                }
-            }
-            profiles: {
-                Row: {
-                    id: string
-                    tenant_id: string
-                    name: string
-                    role: 'admin' | 'nurse'
-                    created_at: string
-                }
-                Insert: {
-                    id: string
-                    tenant_id: string
-                    name: string
-                    role?: 'admin' | 'nurse'
-                    created_at?: string
-                }
-                Update: {
-                    id?: string
-                    tenant_id?: string
-                    name?: string
-                    role?: 'admin' | 'nurse'
-                    created_at?: string
-                }
-            }
-            patients: {
-                Row: {
-                    id: string
-                    tenant_id: string
-                    name: string
-                    kana_name: string | null
-                    care_level: string | null
-                    insurance_type: string | null
-                    created_at: string
-                }
-                Insert: {
-                    id?: string
-                    tenant_id: string
-                    name: string
-                    kana_name?: string | null
-                    care_level?: string | null
-                    insurance_type?: string | null
-                    created_at?: string
-                }
-                Update: {
-                    id?: string
-                    tenant_id?: string
-                    name?: string
-                    kana_name?: string | null
-                    care_level?: string | null
-                    insurance_type?: string | null
-                    created_at?: string
-                }
-            }
-            visit_records: {
-                Row: {
-                    id: string
-                    tenant_id: string
-                    patient_id: string
-                    nurse_id: string
-                    visit_type: string
-                    temperature: number | null
-                    blood_pressure: string | null
-                    text_record: string | null
-                    image_urls: string[] | null
-                    created_at: string
-                }
-                Insert: {
-                    id?: string
-                    tenant_id: string
-                    patient_id: string
-                    nurse_id: string
-                    visit_type: string
-                    temperature?: number | null
-                    blood_pressure?: string | null
-                    text_record?: string | null
-                    image_urls?: string[] | null
-                    created_at?: string
-                }
-                Update: {
-                    id?: string
-                    tenant_id?: string
-                    patient_id?: string
-                    nurse_id?: string
-                    visit_type?: string
-                    temperature?: number | null
-                    blood_pressure?: string | null
-                    text_record?: string | null
-                    image_urls?: string[] | null
-                    created_at?: string
-                }
-            }
-            messages: {
-                Row: {
-                    id: string
-                    tenant_id: string
-                    sender_id: string
-                    patient_id: string | null
-                    content: string
-                    is_system_alert: boolean
-                    created_at: string
-                }
-                Insert: {
-                    id?: string
-                    tenant_id: string
-                    sender_id: string
-                    patient_id?: string | null
-                    content: string
-                    is_system_alert?: boolean
-                    created_at?: string
-                }
-                Update: {
-                    id?: string
-                    tenant_id?: string
-                    sender_id?: string
-                    patient_id?: string | null
-                    content?: string
-                    is_system_alert?: boolean
-                    created_at?: string
-                }
-            }
-            sales_data: {
-                Row: {
-                    id: string
-                    tenant_id: string
-                    target_month: string
-                    billed_amount: number
-                    received_amount: number | null
-                    patient_name: string
-                    status: 'matched' | 'inferred' | 'error' | 'pending'
-                    ai_comment: string | null
-                    created_at: string
-                }
-                Insert: {
-                    id?: string
-                    tenant_id: string
-                    target_month: string
-                    billed_amount: number
-                    received_amount?: number | null
-                    patient_name: string
-                    status?: 'matched' | 'inferred' | 'error' | 'pending'
-                    ai_comment?: string | null
-                    created_at?: string
-                }
-                Update: {
-                    id?: string
-                    tenant_id?: string
-                    target_month?: string
-                    billed_amount?: number
-                    received_amount?: number | null
-                    patient_name?: string
-                    status?: 'matched' | 'inferred' | 'error' | 'pending'
-                    ai_comment?: string | null
-                    created_at?: string
-                }
-            }
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.4"
+  }
+  public: {
+    Tables: {
+      ai_alerts: {
+        Row: {
+          alert_type: string
+          created_at: string
+          description: string
+          id: string
+          is_resolved: boolean
+          tenant_id: string
+          visit_record_id: string
         }
-        Views: {
-            [_ in never]: never
+        Insert: {
+          alert_type: string
+          created_at?: string
+          description: string
+          id?: string
+          is_resolved?: boolean
+          tenant_id: string
+          visit_record_id: string
         }
-        Functions: {
-            [_ in never]: never
+        Update: {
+          alert_type?: string
+          created_at?: string
+          description?: string
+          id?: string
+          is_resolved?: boolean
+          tenant_id?: string
+          visit_record_id?: string
         }
-        Enums: {
-            [_ in never]: never
+        Relationships: [
+          {
+            foreignKeyName: "ai_alerts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_alerts_visit_record_id_fkey"
+            columns: ["visit_record_id"]
+            isOneToOne: false
+            referencedRelation: "visit_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_system_alert: boolean
+          patient_id: string | null
+          sender_id: string
+          tenant_id: string
         }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_system_alert?: boolean
+          patient_id?: string | null
+          sender_id: string
+          tenant_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_system_alert?: boolean
+          patient_id?: string | null
+          sender_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patients: {
+        Row: {
+          care_level: string | null
+          created_at: string
+          id: string
+          insurance_type: string | null
+          kana_name: string | null
+          name: string
+          tenant_id: string
+        }
+        Insert: {
+          care_level?: string | null
+          created_at?: string
+          id?: string
+          insurance_type?: string | null
+          kana_name?: string | null
+          name: string
+          tenant_id: string
+        }
+        Update: {
+          care_level?: string | null
+          created_at?: string
+          id?: string
+          insurance_type?: string | null
+          kana_name?: string | null
+          name?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          role: Database["public"]["Enums"]["user_role"]
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          name: string
+          role?: Database["public"]["Enums"]["user_role"]
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_data: {
+        Row: {
+          ai_comment: string | null
+          billed_amount: number
+          created_at: string
+          id: string
+          patient_name: string
+          received_amount: number | null
+          status: Database["public"]["Enums"]["sales_status"]
+          target_month: string
+          tenant_id: string
+        }
+        Insert: {
+          ai_comment?: string | null
+          billed_amount: number
+          created_at?: string
+          id?: string
+          patient_name: string
+          received_amount?: number | null
+          status?: Database["public"]["Enums"]["sales_status"]
+          target_month: string
+          tenant_id: string
+        }
+        Update: {
+          ai_comment?: string | null
+          billed_amount?: number
+          created_at?: string
+          id?: string
+          patient_name?: string
+          received_amount?: number | null
+          status?: Database["public"]["Enums"]["sales_status"]
+          target_month?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_data_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      visit_records: {
+        Row: {
+          blood_pressure: string | null
+          created_at: string
+          id: string
+          image_urls: string[] | null
+          nurse_id: string
+          patient_id: string
+          temperature: number | null
+          tenant_id: string
+          text_record: string | null
+          visit_type: string
+        }
+        Insert: {
+          blood_pressure?: string | null
+          created_at?: string
+          id?: string
+          image_urls?: string[] | null
+          nurse_id: string
+          patient_id: string
+          temperature?: number | null
+          tenant_id: string
+          text_record?: string | null
+          visit_type: string
+        }
+        Update: {
+          blood_pressure?: string | null
+          created_at?: string
+          id?: string
+          image_urls?: string[] | null
+          nurse_id?: string
+          patient_id?: string
+          temperature?: number | null
+          tenant_id?: string
+          text_record?: string | null
+          visit_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_records_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_records_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_records_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      get_my_tenant_id: { Args: never; Returns: string }
+    }
+    Enums: {
+      sales_status: "matched" | "inferred" | "error" | "pending"
+      user_role: "admin" | "nurse"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      sales_status: ["matched", "inferred", "error", "pending"],
+      user_role: ["admin", "nurse"],
+    },
+  },
+} as const

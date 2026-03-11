@@ -1,0 +1,310 @@
+"use client";
+
+import { Send, Image as ImageIcon, Menu, Search, AlertCircle, ArrowLeft } from "lucide-react";
+import Link from 'next/link';
+import { Database } from "@/types/supabase";
+import { useEffect, useState, useRef } from "react";
+import { createClient } from "@/utils/supabase/client";
+import { sendMessage } from "../actions";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { Mic } from "lucide-react";
+
+type Profile = Database['public']['Tables']['profiles']['Row'];
+type Message = Database['public']['Tables']['messages']['Row'] & {
+    sender?: { name: string, role: string } | null;
+};
+
+interface ChatPageClientProps {
+    profile: Profile;
+    initialMessages: Message[];
+}
+
+export default function ChatPageClient({ profile, initialMessages }: ChatPageClientProps) {
+    const [messages, setMessages] = useState<Message[]>(initialMessages);
+    const [newMessage, setNewMessage] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const supabase = createClient();
+
+    // 音声認識の設定
+    const { 
+        isListening, 
+        transcript, 
+        startListening, 
+        stopListening, 
+        resetTranscript 
+    } = useSpeechRecognition();
+
+    // 音声入力があった場合にnewMessageに反映
+    useEffect(() => {
+        if (transcript) {
+            setNewMessage((prev) => {
+                // 前回までの手入力に、新しい音声認識の文字列をくっつける（重複を避けるためのシンプルな実装例）
+                // 本来ならより複雑なマージ操作が必要ですが、MVPとして上書き＋追記で対応
+                return transcript;
+            });
+        }
+    }, [transcript]);
+
+    const handleMicClick = () => {
+        if (isListening) {
+            stopListening();
+        } else {
+            // マイクを開始する前に現在の入力をリセット（または統合）する
+            resetTranscript();
+            // 現在の newMessage を transcript に渡すことができれば一番良いですが、
+            // useStateの仕様上、シンプルに音声で上書きされる形になります。
+            startListening();
+        }
+    };
+
+    // スクロールを最下部に移動
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
+
+    // Supabase Realtimeのセットアップ
+    useEffect(() => {
+        if (!profile.tenant_id) return;
+
+        // 現在のテナントIDに一致するメッセージのみを購読
+        const channel = supabase
+            .channel('realtime:messages')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `tenant_id=eq.${profile.tenant_id}`,
+                },
+                async (payload) => {
+                    const newMsg = payload.new as Message;
+                    
+                    // 送信者の詳細情報を取得 (簡易的な実装)
+                    const { data: senderData } = await supabase
+                        .from('profiles')
+                        .select('name, role')
+                        .eq('id', newMsg.sender_id)
+                        .single();
+
+                    if (senderData) {
+                        newMsg.sender = senderData as any;
+                    }
+
+                    // 新しいメッセージを既存の配列の最後に追加
+                    setMessages((prev) => {
+                        // 重複防止（オプティミスティックUIアップデート等に対応）
+                        if (prev.some(m => m.id === newMsg.id)) return prev;
+                        return [...prev, newMsg];
+                    });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [profile.tenant_id, supabase]);
+
+    const handleSendMessage = async () => {
+        if (!newMessage.trim() || isSubmitting || !profile.tenant_id) return;
+
+        setIsSubmitting(true);
+        if (isListening) stopListening(); // 送信時にマイクを止める
+        
+        const optimisticContent = newMessage;
+        setNewMessage(""); // 入力欄を素早くクリア
+        resetTranscript(); // 音声認識データもクリア
+
+        try {
+            const formData = new FormData();
+            formData.append("content", optimisticContent);
+            formData.append("tenant_id", profile.tenant_id);
+            formData.append("sender_id", profile.id);
+
+            const result = await sendMessage(formData);
+            if (result?.error) {
+                console.error(result.error);
+                // エラー時は書き戻す
+                setNewMessage(optimisticContent);
+            }
+        } catch (e) {
+            console.error(e);
+            setNewMessage(optimisticContent);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        // Shift + Enter で改行、Enter のみで送信
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
+        }
+    };
+
+    return (
+        <div className="bg-[#FFFAF0] min-h-screen font-sans flex flex-col md:flex-row">
+            {/* Mobile Header (Hidden on PC) */}
+            <header className="md:hidden bg-white px-4 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+                <Link href={profile.role === 'admin' ? '/admin/dashboard' : '/nurse'} className="text-gray-500 hover:text-orange-500 transition-colors p-2">
+                    <ArrowLeft size={24} />
+                </Link>
+                <h1 className="text-lg font-bold text-gray-800">全体 タイムライン</h1>
+                <button className="text-orange-500 p-2">
+                    <Menu size={24} />
+                </button>
+            </header>
+
+            {/* Sidebar / Thread List */}
+            <aside className="hidden md:flex flex-col w-80 bg-white border-r border-gray-100 shadow-sm h-screen">
+                <div className="p-6">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                        <Link href={profile.role === 'admin' ? '/admin/dashboard' : '/nurse'} className="text-gray-400 hover:text-orange-500">
+                             <ArrowLeft size={20} />
+                        </Link>
+                        メッセージ
+                    </h2>
+                    <div className="bg-gray-50 text-gray-400 p-3 rounded-2xl flex items-center gap-2 mb-4">
+                        <Search size={20} />
+                        <input type="text" placeholder="利用者名など..." className="bg-transparent focus:outline-none w-full text-sm font-medium" />
+                    </div>
+                </div>
+
+                <div className="overflow-y-auto flex-1 border-t border-gray-100">
+                    <div className="border-b border-gray-100 p-4 hover:bg-orange-50 cursor-pointer bg-orange-50 transition-colors border-l-4 border-l-orange-500">
+                        <h3 className="font-bold text-orange-600 mb-1">全体 タイムライン</h3>
+                        <p className="text-xs text-orange-500 bg-orange-100 px-2 py-1 rounded-full inline-block">新着あり</p>
+                    </div>
+                    {/* Dummy Data */}
+                    <div className="border-b border-gray-100 p-4 hover:bg-orange-50 cursor-pointer transition-colors">
+                        <h3 className="font-bold text-gray-700 mb-1">佐藤 健一 様 スレッド</h3>
+                        <p className="text-sm text-gray-400 truncate">体温36.5C、著変なし...</p>
+                    </div>
+                </div>
+            </aside>
+
+            {/* Chat Area */}
+            <main className="flex-1 flex flex-col h-[calc(100vh-64px)] md:h-screen bg-[#FFFDF8]">
+                {/* Chat Header (PC) */}
+                <header className="hidden md:flex bg-white px-8 py-5 items-center justify-between border-b border-gray-100 shadow-sm z-10">
+                    <h1 className="text-xl font-bold text-gray-800">全体 タイムライン</h1>
+                    <button className="text-gray-400 hover:text-orange-500 transition-colors bg-orange-50 p-2 rounded-full">
+                        <Menu size={24} />
+                    </button>
+                </header>
+
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col gap-6">
+                    
+                    {!profile.tenant_id ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center">
+                            <div className="bg-white p-8 rounded-3xl shadow-sm max-w-md w-full">
+                                <h2 className="text-xl font-bold text-gray-800 mb-4">チャットを利用するには</h2>
+                                <p className="text-gray-500 mb-6 text-sm">
+                                    まだ現在の事業所（テナント）に所属していないため、メッセージを送受信できません。<br/>
+                                    ホーム画面からテストデータを生成してください。
+                                </p>
+                                <Link 
+                                    href="/nurse"
+                                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-6 rounded-2xl block transition-colors"
+                                >
+                                    ホーム画面へ戻る
+                                </Link>
+                            </div>
+                        </div>
+                    ) : messages.length === 0 ? (
+                        <div className="text-center text-gray-400 mt-10">
+                            まだメッセージはありません。最初のメッセージを送信してみましょう。
+                        </div>
+                    ) : (
+                        messages.map((msg) => {
+                        const isMine = msg.sender_id === profile.id;
+
+                        // AIアラート（システム通知）の場合
+                        if (msg.is_system_alert) {
+                            return (
+                                <div key={msg.id} className="flex justify-center my-4">
+                                    <div className="bg-orange-50 border border-orange-200 p-4 rounded-3xl shadow-sm max-w-[90%] text-center">
+                                        <span className="flex justify-center items-center gap-1 text-orange-600 font-bold mb-2">
+                                            <AlertCircle size={18} /> AI 加算アラート
+                                        </span>
+                                        <p className="text-sm text-orange-800 font-medium leading-relaxed">
+                                            {msg.content}
+                                        </p>
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        // 通常のメッセージ
+                        return (
+                            <div key={msg.id} className={`flex items-end gap-3 max-w-[85%] ${isMine ? 'self-end flex-row-reverse' : ''}`}>
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-2 border-white shadow-sm ${isMine ? 'bg-orange-500' : 'bg-blue-100'}`}>
+                                    <span className={`${isMine ? 'text-white' : 'text-blue-600'} font-bold text-sm`}>
+                                        {isMine ? '私' : (msg.sender?.name?.charAt(0) || '?')}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className={`text-xs text-gray-400 font-bold block mb-1 ${isMine ? 'mr-2 text-right' : 'ml-2'}`}>
+                                        {!isMine && `${msg.sender?.name || '不明'} • `} 
+                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    <div className={`p-4 rounded-3xl shadow-sm font-medium whitespace-pre-wrap ${
+                                        isMine 
+                                        ? 'bg-orange-500 text-white rounded-br-sm' 
+                                        : 'bg-white text-gray-700 rounded-bl-sm'
+                                    }`}>
+                                        {msg.content}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }))}
+                    <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input Area */}
+                <div className="bg-white p-4 border-t border-gray-100 sticky bottom-0 z-10 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+                    <div className="flex items-center gap-3">
+                        <button className="text-gray-400 hover:text-orange-500 transition-colors p-3 bg-gray-50 rounded-full active:scale-95">
+                            <ImageIcon size={24} />
+                        </button>
+                        <div className="flex-1 relative">
+                            <textarea
+                                value={newMessage}
+                                onChange={(e) => setNewMessage(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                className="w-full bg-gray-50 rounded-3xl focus:outline-none focus:ring-2 focus:ring-orange-200 text-gray-700 resize-none px-6 py-4 pr-12 max-h-32 text-sm font-medium"
+                                placeholder={isListening ? "音声を聞き取り中..." : "メッセージを入力... (Enterで送信)"}
+                                rows={1}
+                                disabled={isSubmitting}
+                            />
+                            <button
+                                onClick={handleMicClick}
+                                className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors ${
+                                    isListening ? "text-red-500 bg-red-50 hover:bg-red-100 animate-pulse" : "text-gray-400 hover:text-orange-500 hover:bg-orange-50"
+                                }`}
+                            >
+                                <Mic size={20} />
+                            </button>
+                        </div>
+                        <button 
+                            onClick={handleSendMessage}
+                            disabled={isSubmitting || !newMessage.trim()}
+                            className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white p-4 rounded-full shadow-lg transition-transform active:scale-95 flex items-center justify-center"
+                        >
+                            <Send size={20} />
+                        </button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+}

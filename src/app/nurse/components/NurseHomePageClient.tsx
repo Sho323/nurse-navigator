@@ -6,6 +6,7 @@ import { Database } from "@/types/supabase";
 import { useRouter } from "next/navigation";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { saveVisitRecord } from "../actions";
+import { createClient } from "@/utils/supabase/client";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type Patient = Database['public']['Tables']['patients']['Row'];
@@ -83,7 +84,7 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
 
         try {
             const formData = new FormData();
-            formData.append("tenant_id", profile.tenant_id);
+            formData.append("tenant_id", profile.tenant_id ?? "");
             formData.append("patient_id", patients[0].id); // default to first scheduled patient
             formData.append("nurse_id", profile.id);
             formData.append("visit_type", "通常訪問"); // could be parameterized
@@ -127,12 +128,26 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
         }
     };
 
+    const handleLogout = async () => {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        router.refresh(); // This will trigger middleware to redirect to /login
+    };
+
     return (
         <div className="bg-[#FFFAF0] min-h-screen pb-24 font-sans">
             {/* Header */}
-            <header className="bg-white px-6 py-6 shadow-sm rounded-b-3xl">
-                <h1 className="text-xl font-bold text-gray-800">こんにちは、{profile.name}さん</h1>
-                <p className="text-sm text-gray-500 mt-1">本日の訪問予定: {patients.length}件</p>
+            <header className="bg-white px-6 py-6 shadow-sm rounded-b-3xl flex justify-between items-start">
+                <div>
+                    <h1 className="text-xl font-bold text-gray-800">こんにちは、{profile.name}さん</h1>
+                    <p className="text-sm text-gray-500 mt-1">本日の訪問予定: {patients.length}件</p>
+                </div>
+                <button
+                    onClick={handleLogout}
+                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-2 rounded-xl font-bold transition-colors"
+                >
+                    ログアウト
+                </button>
             </header>
 
             {/* Schedule / Cards */}
@@ -197,28 +212,21 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
                     </div>
                 </div>
 
-                {/* Voice Input */}
-                <div className="bg-white p-6 rounded-3xl shadow-sm mb-4 relative">
+                {/* Text & Voice Input */}
+                <div className="relative mb-4">
                     <textarea
                         value={transcript}
                         onChange={(e) => setTranscript(e.target.value)}
-                        className="w-full h-32 focus:outline-none text-gray-700 resize-none bg-transparent"
-                        placeholder="記録をここに入力するか、マイクボタンを押して音声入力してください..."
+                        className="w-full h-32 bg-white rounded-3xl p-6 pr-14 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-200 text-gray-700 resize-none text-sm font-medium"
+                        placeholder={isListening ? "音声を聞き取り中..." : "訪問記録を入力... (マイクでの音声入力も可能)"}
                     />
                     <button 
                         onClick={isListening ? stopListening : startListening}
-                        className={`absolute bottom-4 right-4 p-4 rounded-full shadow-lg transition-transform active:scale-95 ${
-                            isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-orange-500 hover:bg-orange-600'
-                        } text-white`}
+                        className={`absolute right-4 bottom-4 p-3 rounded-full transition-colors flex items-center justify-center ${
+                            isListening ? "text-red-500 bg-red-50 hover:bg-red-100 animate-pulse outline outline-2 outline-red-200 outline-offset-2" : "text-gray-400 hover:text-orange-500 hover:bg-orange-50 bg-gray-50"
+                        }`}
                     >
-                        {isListening ? (
-                            <div className="w-6 h-6 flex items-center justify-center">
-                                <span className="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-white opacity-75"></span>
-                                <Mic size={24} />
-                            </div>
-                        ) : (
-                            <Mic size={24} />
-                        )}
+                        <Mic size={20} />
                     </button>
                 </div>
 

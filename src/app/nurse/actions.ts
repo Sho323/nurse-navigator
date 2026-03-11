@@ -77,5 +77,19 @@ export async function saveVisitRecord(formData: FormData) {
         is_system_alert: false
     });
 
+    // 記録内容を非同期でAIによる加算チェックへ渡す（完了を待たない）
+    if (text_record) {
+        import("@/utils/ai").then((module) => {
+            module.checkBillingRules({
+                textRecord: text_record,
+                tenantId: tenant_id,
+                patientId: patient_id,
+                visitRecordId: visitRecord.id,
+                nurseId: nurse_id,
+            });
+        }).catch(err => console.error(err));
+    }
+
     return { success: true, data: visitRecord };
 }
+
