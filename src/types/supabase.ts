@@ -120,6 +120,15 @@ export type Database = {
           kana_name: string | null
           name: string
           tenant_id: string
+          diagnosis: string | null
+          current_illness: string | null
+          medical_history: string | null
+          primary_physician: string | null
+          family_structure: string | null
+          key_person_contact: string | null
+          emergency_response: string | null
+          precautions: string | null
+          monthly_schedule: string | null
         }
         Insert: {
           care_level?: string | null
@@ -129,6 +138,15 @@ export type Database = {
           kana_name?: string | null
           name: string
           tenant_id: string
+          diagnosis?: string | null
+          current_illness?: string | null
+          medical_history?: string | null
+          primary_physician?: string | null
+          family_structure?: string | null
+          key_person_contact?: string | null
+          emergency_response?: string | null
+          precautions?: string | null
+          monthly_schedule?: string | null
         }
         Update: {
           care_level?: string | null
@@ -138,6 +156,15 @@ export type Database = {
           kana_name?: string | null
           name?: string
           tenant_id?: string
+          diagnosis?: string | null
+          current_illness?: string | null
+          medical_history?: string | null
+          primary_physician?: string | null
+          family_structure?: string | null
+          key_person_contact?: string | null
+          emergency_response?: string | null
+          precautions?: string | null
+          monthly_schedule?: string | null
         }
         Relationships: [
           {

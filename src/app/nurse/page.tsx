@@ -12,9 +12,12 @@ export default async function NurseHomePage() {
 
     // Admin users are typically redirected to the dashboard, but if they land here,
     // we can show them the nurse view or handle differently based on requirements.
+    // デモ用: 管理者でもナースホームのUIを確認できるようにするため、以下のブロックをコメントアウト
+    /*
     if (profile.role === "admin") {
         redirect("/admin/dashboard");
     }
+    */
 
     const patients = await getPatients(profile.tenant_id);
 

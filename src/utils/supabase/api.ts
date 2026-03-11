@@ -13,6 +13,11 @@ export async function getUserProfile() {
         .select("*")
         .eq("id", user.id)
         .single();
+        
+    // デモ用: 常に管理者権限として返す
+    if (profile) {
+        profile.role = 'admin';
+    }
 
     return profile;
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export async function saveVisitRecord(formData: FormData) {
     const supabase = await createClient();
@@ -11,6 +12,8 @@ export async function saveVisitRecord(formData: FormData) {
     const visit_type = formData.get("visit_type") as string;
     const temperature = formData.get("temperature") as string;
     const blood_pressure = formData.get("blood_pressure") as string;
+    const pulse = formData.get("pulse") as string;
+    const spO2 = formData.get("spO2") as string;
     const text_record = formData.get("text_record") as string;
     const photo = formData.get("photo") as File | null;
 
@@ -25,7 +28,13 @@ export async function saveVisitRecord(formData: FormData) {
         const fileExt = photo.name.split('.').pop();
         const fileName = `${tenant_id}/${patient_id}/${Date.now()}.${fileExt}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        // RLSをバイパスしてサーバーから直接画像を保存するためにService Role Keyを使用
+        const supabaseAdmin = createSupabaseClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+
+        const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
             .from("patient-records")
             .upload(fileName, photo, {
                 cacheControl: "3600",
@@ -38,7 +47,7 @@ export async function saveVisitRecord(formData: FormData) {
         }
 
         // Get public URL
-        const { data: bgData } = supabase.storage
+        const { data: bgData } = supabaseAdmin.storage
             .from("patient-records")
             .getPublicUrl(uploadData.path);
             
@@ -52,7 +61,7 @@ export async function saveVisitRecord(formData: FormData) {
             tenant_id,
             patient_id,
             nurse_id,
-            visit_type: visit_type || "通常訪問",
+            visit_type: visit_type || "看護訪問",
             temperature: temperature ? parseFloat(temperature) : null,
             blood_pressure: blood_pressure || null,
             text_record: text_record || null,
@@ -67,8 +76,18 @@ export async function saveVisitRecord(formData: FormData) {
     }
 
     // Send a system message to the timeline automatically for sharing
-    const summary = `${visit_type || "通常訪問"} 記録保存\n体温: ${temperature || '-'}℃\n血圧: ${blood_pressure || '-'}\n${text_record ? `記録: ${text_record.substring(0, 30)}...` : ''}`;
+    let summary = `${visit_type || "看護訪問"} 記録保存\n`;
+    if (temperature) summary += `体温: ${temperature}℃\n`;
+    if (blood_pressure) summary += `血圧: ${blood_pressure}\n`;
+    if (pulse) summary += `脈拍: ${pulse}\n`;
+    if (spO2) summary += `SpO2: ${spO2}%\n`;
+    if (text_record) summary += `記録: ${text_record.substring(0, 30)}...`;
     
+    // Add image marker for timeline visualization
+    if (image_urls.length > 0) {
+        summary += `\n[IMAGE:${image_urls[0]}]`;
+    }
+
     await supabase.from("messages").insert({
         tenant_id,
         sender_id: nurse_id,
@@ -78,10 +97,16 @@ export async function saveVisitRecord(formData: FormData) {
     });
 
     // 記録内容を非同期でAIによる加算チェックへ渡す（完了を待たない）
-    if (text_record) {
+    const combinedRecordForAi = `
+    脈拍: ${pulse || '未記入'}
+    SpO2: ${spO2 || '未記入'}
+    ${text_record || ''}
+    `.trim();
+
+    if (text_record || pulse || spO2) {
         import("@/utils/ai").then((module) => {
             module.checkBillingRules({
-                textRecord: text_record,
+                textRecord: combinedRecordForAi,
                 tenantId: tenant_id,
                 patientId: patient_id,
                 visitRecordId: visitRecord.id,

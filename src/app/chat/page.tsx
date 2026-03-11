@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getUserProfile } from "@/utils/supabase/api";
+import { getUserProfile, getPatients } from "@/utils/supabase/api";
 import ChatPageClient from "./components/ChatPageClient";
 import { createClient } from "@/utils/supabase/server";
 
@@ -34,7 +34,10 @@ export default async function ChatPage() {
         sender: Array.isArray(msg.sender) ? msg.sender[0] : msg.sender
     }));
 
+    // Fetch patients for the threads
+    const patients = await getPatients(profile.tenant_id);
+
     return (
-        <ChatPageClient profile={profile} initialMessages={initialMessages as any} />
+        <ChatPageClient profile={profile} initialMessages={initialMessages as any} patients={patients} />
     );
 }

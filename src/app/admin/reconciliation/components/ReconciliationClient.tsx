@@ -12,6 +12,46 @@ export default function ReconciliationClient({ profile, initialData }: { profile
     const [isProcessing, setIsProcessing] = useState(false);
     const [resultMsg, setResultMsg] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
+    
+    // Store selected files
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [bankFile, setBankFile] = useState<File | null>(null);
+
+    const handleProcess = async () => {
+        if (!receiptFile || !bankFile) {
+            setErrorMsg("請求CSVと入金CSVの両方を選択してください。");
+            return;
+        }
+
+        setIsProcessing(true);
+        setErrorMsg("");
+        setResultMsg("");
+
+        try {
+            // Read files as text
+            const receiptCsv = await receiptFile.text();
+            const bankCsv = await bankFile.text();
+
+            const formData = new FormData();
+            formData.append("receiptCsv", receiptCsv);
+            formData.append("bankCsv", bankCsv);
+            formData.append("tenant_id", profile.tenant_id);
+
+            const res = await processReconciliation(formData);
+            if (res?.error) {
+                setErrorMsg(res.error);
+            } else {
+                setResultMsg("AIによる消込処理が完了しました。");
+                // Reset file selections on success
+                setReceiptFile(null);
+                setBankFile(null);
+            }
+        } catch (e: any) {
+            setErrorMsg("エラーが発生しました: " + e.message);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const handleDemoProcess = async () => {
         setIsProcessing(true);
@@ -28,7 +68,7 @@ export default function ReconciliationClient({ profile, initialData }: { profile
         const dummyBank = `振込人名義,入金額
 サトウ ケンイチ,15000
 スズキ タロウ,24500
-タナカ イチロウ,5000`; // 山本陽子の振込がない（エラー検知用）
+タナカ イチロウ,5000`;
 
         try {
             const formData = new FormData();
@@ -40,7 +80,7 @@ export default function ReconciliationClient({ profile, initialData }: { profile
             if (res?.error) {
                 setErrorMsg(res.error);
             } else {
-                setResultMsg("AIによる消込処理が完了しました。");
+                setResultMsg("AIによるデモ消込処理が完了しました。");
             }
         } catch (e: any) {
             setErrorMsg("エラーが発生しました: " + e.message);
@@ -90,27 +130,51 @@ export default function ReconciliationClient({ profile, initialData }: { profile
                         <UploadCloud size={32} />
                     </div>
                     <h2 className="text-xl font-bold text-gray-700 mb-2 relative z-10">ここにファイルをドロップするか、クリックして選択</h2>
-                    <p className="text-gray-400 font-medium relative z-10">レセプトCSV・銀行CSV (最大10MB)</p>
+                    <p className="text-gray-400 font-medium relative z-10">レセプトCSV・銀行CSV</p>
 
                     <div className="mt-8 flex gap-4 w-full max-w-lg relative z-10">
-                        <div className="flex-1 bg-gray-50 border border-gray-100 p-4 rounded-2xl flex flex-col gap-1 items-center justify-center cursor-not-allowed opacity-60">
-                            <span className="block text-sm font-bold text-gray-700">請求CSV (未実装)</span>
-                        </div>
-                        <div className="flex-1 bg-gray-50 border border-gray-100 p-4 rounded-2xl flex flex-col gap-1 items-center justify-center cursor-not-allowed opacity-60">
-                            <span className="block text-sm font-bold text-gray-700">入金CSV (未実装)</span>
-                        </div>
+                        <label className="flex-1 bg-gray-50 border border-gray-200 p-4 rounded-2xl flex flex-col gap-1 items-center justify-center cursor-pointer hover:bg-orange-50 hover:border-orange-200 transition-colors">
+                            <span className="block text-sm font-bold text-gray-700">請求CSVを選択</span>
+                            {receiptFile && <span className="block text-xs text-orange-600 font-bold max-w-full truncate px-2">{receiptFile.name}</span>}
+                            <input 
+                                type="file" 
+                                accept=".csv" 
+                                className="hidden" 
+                                onChange={(e) => setReceiptFile(e.target.files?.[0] || null)} 
+                            />
+                        </label>
+                        <label className="flex-1 bg-gray-50 border border-gray-200 p-4 rounded-2xl flex flex-col gap-1 items-center justify-center cursor-pointer hover:bg-orange-50 hover:border-orange-200 transition-colors">
+                            <span className="block text-sm font-bold text-gray-700">入金CSVを選択</span>
+                            {bankFile && <span className="block text-xs text-orange-600 font-bold max-w-full truncate px-2">{bankFile.name}</span>}
+                            <input 
+                                type="file" 
+                                accept=".csv" 
+                                className="hidden" 
+                                onChange={(e) => setBankFile(e.target.files?.[0] || null)} 
+                            />
+                        </label>
                     </div>
                     
-                    <div className="relative z-10 mt-8 flex flex-col items-center">
+                    <div className="relative z-10 mt-8 flex flex-col items-center gap-4">
+                        <button 
+                            onClick={handleProcess}
+                            disabled={isProcessing || !receiptFile || !bankFile}
+                            className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white font-bold py-4 px-12 rounded-full shadow-md transition-transform active:scale-95 flex items-center gap-2"
+                        >
+                            {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <FileSpreadsheet size={20} />}
+                            {isProcessing ? 'AI解析中...' : 'アップロードしたCSVでAI消込を開始'}
+                        </button>
+                        
+                        <div className="text-sm font-bold text-gray-400">または</div>
+
                         <button 
                             onClick={handleDemoProcess}
                             disabled={isProcessing}
-                            className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white font-bold py-4 px-12 rounded-full shadow-lg transition-transform active:scale-95 flex items-center gap-2"
+                            className="bg-white border-2 border-orange-200 text-orange-500 hover:bg-orange-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 font-bold py-3 px-8 rounded-full transition-transform active:scale-95 flex items-center gap-2"
                         >
-                            {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <FileSpreadsheet size={20} />}
-                            {isProcessing ? 'AI解析中...' : 'デモデータでAI解析を開始する'}
+                            {isProcessing ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16} />}
+                            テスト用デモデータで実行
                         </button>
-                        <p className="text-xs text-orange-400 mt-3">※ デモ用のダミーCSVデータを生成してAIによる消込テストを行います</p>
                     </div>
                 </div>
 

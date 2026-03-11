@@ -6,7 +6,8 @@
     "dev": "NODE_OPTIONS='--max-http-header-size=32768' next dev",
     "build": "next build",
     "start": "NODE_OPTIONS='--max-http-header-size=32768' next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest"
   },
   "dependencies": {
     "@supabase/auth-ui-react": "^0.4.7",

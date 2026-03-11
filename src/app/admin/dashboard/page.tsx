@@ -3,6 +3,9 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { getUserProfile } from "@/utils/supabase/api";
 import { redirect } from "next/navigation";
 import { LayoutDashboard, FileSpreadsheet, Settings, Users, Bell, Search, AlertCircle, ArrowUpRight } from "lucide-react";
+import DashboardHeader from "./components/DashboardHeader";
+import AlertToggle from "../components/AlertToggle";
+import Link from "next/link";
 
 export default async function AdminDashboardPage() {
     const profile = await getUserProfile();
@@ -34,14 +37,37 @@ export default async function AdminDashboardPage() {
             )
         `)
         .eq("tenant_id", profile.tenant_id)
+        .eq("is_resolved", false) // 未確認のアラートのみ表示
         .order("created_at", { ascending: false })
         .limit(10);
 
-    // Fetch simple metrics (mocking sales for now, actual counts for records)
+    // Fetch simple metrics (actual counts for records)
     const { count: nurseCount } = await supabase
         .from("profiles")
         .select("*", { count: "exact", head: true })
         .eq("tenant_id", profile.tenant_id);
+
+    // Fetch Sales data to calculate actual billing and uncollected amounts
+    const { data: salesData } = await supabaseAdmin
+        .from("sales_data")
+        .select("billed_amount, received_amount")
+        .eq("tenant_id", profile.tenant_id)
+        .eq("target_month", "2026-03"); // 現状のデモ用月
+
+    let totalBilled = 0;
+    let totalUncollected = 0;
+
+    if (salesData) {
+        for (const sale of salesData) {
+            const billed = sale.billed_amount || 0;
+            const received = sale.received_amount || 0;
+            
+            totalBilled += billed;
+            if (billed > received) {
+                totalUncollected += (billed - received);
+            }
+        }
+    }
 
     return (
         <div className="min-h-screen bg-[#FFFAF0] flex font-sans">
@@ -52,38 +78,30 @@ export default async function AdminDashboardPage() {
                 </div>
 
                 <nav className="flex-1 w-full px-6 flex flex-col gap-4">
-                    <a href="/admin/dashboard" className="flex items-center gap-3 text-orange-500 bg-orange-50 px-4 py-3 rounded-2xl font-bold">
+                    <Link href="/admin/dashboard" className="flex items-center gap-3 text-orange-500 bg-orange-50 px-4 py-3 rounded-2xl font-bold transition-colors">
                         <LayoutDashboard size={20} />
                         ダッシュボード
-                    </a>
-                    <a href="#" className="flex items-center gap-3 text-gray-500 hover:text-orange-500 hover:bg-orange-50 px-4 py-3 rounded-2xl font-bold transition-colors">
+                    </Link>
+                    <Link href="/admin/alerts" className="flex items-center gap-3 text-gray-500 hover:text-orange-500 hover:bg-orange-50 px-4 py-3 rounded-2xl font-bold transition-colors">
+                        <AlertCircle size={20} />
+                        加算・アラート一覧
+                    </Link>
+                    <Link href="#" className="flex items-center gap-3 text-gray-500 hover:text-orange-500 hover:bg-orange-50 px-4 py-3 rounded-2xl font-bold transition-colors">
                         <FileSpreadsheet size={20} />
                         CSV 消込
-                    </a>
-                    <a href="/nurse" className="flex items-center gap-3 text-gray-500 hover:text-orange-500 hover:bg-orange-50 px-4 py-3 rounded-2xl font-bold transition-colors">
+                    </Link>
+                    <div className="border-t border-gray-100 my-2"></div>
+                    <Link href="/nurse" className="flex items-center gap-3 text-gray-500 hover:text-orange-500 hover:bg-orange-50 px-4 py-3 rounded-2xl font-bold transition-colors">
                         <Users size={20} />
                         ナースホームへ
-                    </a>
+                    </Link>
                 </nav>
             </aside>
 
             {/* Main Content */}
             <main className="flex-1 p-10 overflow-auto">
-                {/* Header */}
-                <header className="flex justify-between items-center mb-10">
-                    <div>
-                        <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">ダッシュボード</h1>
-                        <p className="text-gray-500 mt-1 font-medium">現在の事業所サマリー</p>
-                    </div>
-                    <div className="flex gap-4 items-center">
-                        <div className="bg-white p-3 rounded-2xl shadow-sm text-orange-500 relative">
-                            <Bell size={20} />
-                            {(alerts?.length || 0) > 0 && (
-                                <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                            )}
-                        </div>
-                    </div>
-                </header>
+                {/* Header with Notifications */}
+                <DashboardHeader alerts={alerts || []} />
 
                 {/* Big Numbers (Kompanion style) */}
                 <div className="grid grid-cols-3 gap-6 mb-8">
@@ -91,17 +109,17 @@ export default async function AdminDashboardPage() {
                         <div className="absolute top-0 right-0 p-4 text-green-500 bg-green-50 rounded-bl-3xl font-bold flex items-center gap-1">
                             <ArrowUpRight size={16} /> 12%
                         </div>
-                        <span className="text-gray-400 font-bold mb-2">今月の売上予測 (デモ)</span>
+                        <span className="text-gray-400 font-bold mb-2">今月の売上額</span>
                         <div className="flex items-baseline gap-1">
-                            <span className="text-5xl font-extrabold text-gray-800">4,250</span>
-                            <span className="text-xl font-bold text-gray-400">千円</span>
+                            <span className="text-4xl lg:text-5xl font-extrabold text-gray-800">{totalBilled.toLocaleString()}</span>
+                            <span className="text-xl font-bold text-gray-400">円</span>
                         </div>
                     </div>
                     <div className="bg-white p-8 rounded-3xl shadow-sm flex flex-col justify-center items-center">
-                        <span className="text-gray-400 font-bold mb-2">未収金総額 (デモ)</span>
+                        <span className="text-gray-400 font-bold mb-2">未収金総額</span>
                         <div className="flex items-baseline gap-1">
-                            <span className="text-5xl font-extrabold text-red-500">120</span>
-                            <span className="text-xl font-bold text-gray-400">千円</span>
+                            <span className={`text-4xl lg:text-5xl font-extrabold ${totalUncollected > 0 ? 'text-red-500' : 'text-gray-800'}`}>{totalUncollected.toLocaleString()}</span>
+                            <span className="text-xl font-bold text-gray-400">円</span>
                         </div>
                     </div>
                     <div className="bg-white p-8 rounded-3xl shadow-sm flex flex-col justify-center items-center">
@@ -155,13 +173,13 @@ export default async function AdminDashboardPage() {
                                                     : alert.visit_record?.patient?.name || "不明な利用者"} 
                                                 様
                                             </span>
-                                            <span className="text-xs font-bold text-orange-500 bg-orange-100 px-2 py-1 rounded-full">未確認</span>
+                                            <AlertToggle alertId={alert.id} initialStatus={alert.is_resolved} variant="badge" />
                                         </div>
                                         <p className="text-xs font-bold text-orange-500 mb-1">{alert.alert_type}</p>
                                         <p className="text-sm text-gray-600 font-medium leading-relaxed">
                                             {alert.description}
                                         </p>
-                                        <button className="mt-3 text-sm font-bold text-orange-600 hover:text-orange-700">詳細を確認 →</button>
+                                        <Link href="/admin/alerts" className="mt-3 text-sm font-bold text-orange-600 hover:text-orange-700 block text-right">詳細を確認 →</Link>
                                     </div>
                                 ))
                             ) : (

@@ -1,11 +1,12 @@
 "use client";
 
-import { Send, Image as ImageIcon, Menu, Search, AlertCircle, ArrowLeft } from "lucide-react";
+import { Send, Image as ImageIcon, Menu, Search, AlertCircle, ArrowLeft, Home, MessageSquare, Calendar, LayoutDashboard, FileSpreadsheet, Lock, Users, LogOut, X } from "lucide-react";
 import Link from 'next/link';
 import { Database } from "@/types/supabase";
 import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { sendMessage } from "../actions";
+import { useRouter } from "next/navigation";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { Mic } from "lucide-react";
 
@@ -13,18 +14,26 @@ type Profile = Database['public']['Tables']['profiles']['Row'];
 type Message = Database['public']['Tables']['messages']['Row'] & {
     sender?: { name: string, role: string } | null;
 };
+type Patient = Database['public']['Tables']['patients']['Row'];
 
 interface ChatPageClientProps {
     profile: Profile;
     initialMessages: Message[];
+    patients: Patient[];
 }
 
-export default function ChatPageClient({ profile, initialMessages }: ChatPageClientProps) {
+export default function ChatPageClient({ profile, initialMessages, patients }: ChatPageClientProps) {
     const [messages, setMessages] = useState<Message[]>(initialMessages);
     const [newMessage, setNewMessage] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [selectedPatientId, setSelectedPatientId] = useState<string | null>(patients.length > 0 ? patients[0].id : null);
+    const [photo, setPhoto] = useState<File | null>(null);
+    const [photoPreview, setPhotoPreview] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const supabase = createClient();
+    const router = useRouter();
 
     // 音声認識の設定
     const { 
@@ -112,13 +121,18 @@ export default function ChatPageClient({ profile, initialMessages }: ChatPageCli
     }, [profile.tenant_id, supabase]);
 
     const handleSendMessage = async () => {
-        if (!newMessage.trim() || isSubmitting || !profile.tenant_id) return;
+        if ((!newMessage.trim() && !photo) || isSubmitting || !profile.tenant_id) return;
 
         setIsSubmitting(true);
         if (isListening) stopListening(); // 送信時にマイクを止める
         
         const optimisticContent = newMessage;
+        const currentPhoto = photo;
+        
         setNewMessage(""); // 入力欄を素早くクリア
+        setPhoto(null);
+        setPhotoPreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         resetTranscript(); // 音声認識データもクリア
 
         try {
@@ -126,16 +140,30 @@ export default function ChatPageClient({ profile, initialMessages }: ChatPageCli
             formData.append("content", optimisticContent);
             formData.append("tenant_id", profile.tenant_id);
             formData.append("sender_id", profile.id);
+            if (selectedPatientId) {
+                formData.append("patient_id", selectedPatientId);
+            }
+            if (currentPhoto) {
+                formData.append("photo", currentPhoto);
+            }
 
             const result = await sendMessage(formData);
             if (result?.error) {
                 console.error(result.error);
                 // エラー時は書き戻す
                 setNewMessage(optimisticContent);
+                if (currentPhoto) {
+                    setPhoto(currentPhoto);
+                    setPhotoPreview(URL.createObjectURL(currentPhoto));
+                }
             }
         } catch (e) {
             console.error(e);
             setNewMessage(optimisticContent);
+            if (currentPhoto) {
+                setPhoto(currentPhoto);
+                setPhotoPreview(URL.createObjectURL(currentPhoto));
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -149,17 +177,66 @@ export default function ChatPageClient({ profile, initialMessages }: ChatPageCli
         }
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setPhoto(file);
+            setPhotoPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        router.refresh(); // Middleware will redirect to login
+    };
+
+    const filteredMessages = messages.filter(msg => {
+        // 患者が選択されていない（データがない）場合は何も表示しない
+        if (!selectedPatientId) return false; 
+        return msg.patient_id === selectedPatientId;
+    });
+
     return (
         <div className="bg-[#FFFAF0] min-h-screen font-sans flex flex-col md:flex-row">
             {/* Mobile Header (Hidden on PC) */}
-            <header className="md:hidden bg-white px-4 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+            <header className="md:hidden bg-white px-4 py-4 flex items-center justify-between shadow-sm sticky top-0 z-20 relative">
                 <Link href={profile.role === 'admin' ? '/admin/dashboard' : '/nurse'} className="text-gray-500 hover:text-orange-500 transition-colors p-2">
                     <ArrowLeft size={24} />
                 </Link>
-                <h1 className="text-lg font-bold text-gray-800">全体 タイムライン</h1>
-                <button className="text-orange-500 p-2">
+                <select 
+                    value={selectedPatientId || ""} 
+                    onChange={(e) => setSelectedPatientId(e.target.value)}
+                    className="text-lg font-bold text-gray-800 bg-transparent outline-none appearance-none text-center truncate max-w-[200px]"
+                >
+                    {patients.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} 様</option>
+                    ))}
+                </select>
+                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-orange-500 p-2 relative">
                     <Menu size={24} />
                 </button>
+
+                {/* Mobile Dropdown Menu */}
+                {isMenuOpen && (
+                    <div className="absolute top-[60px] right-4 bg-white shadow-xl rounded-2xl w-48 border border-gray-100 flex flex-col overflow-hidden z-30">
+                        <Link href="/nurse" className="flex items-center gap-2 p-4 border-b border-gray-50 text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors font-bold text-sm">
+                            <Users size={16} /> ナースホーム
+                        </Link>
+                        {profile.role === 'admin' && (
+                            <>
+                                <Link href="/admin/dashboard" className="flex items-center gap-2 p-4 border-b border-gray-50 text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors font-bold text-sm">
+                                    <LayoutDashboard size={16} /> ダッシュボード
+                                </Link>
+                                <Link href="/admin/reconciliation" className="flex items-center gap-2 p-4 border-b border-gray-50 text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors font-bold text-sm">
+                                    <FileSpreadsheet size={16} /> CSV消込
+                                </Link>
+                            </>
+                        )}
+                        <button onClick={handleLogout} className="flex items-center gap-2 p-4 text-red-600 hover:bg-red-50 transition-colors font-bold text-sm text-left">
+                            <LogOut size={16} /> ログアウト
+                        </button>
+                    </div>
+                )}
             </header>
 
             {/* Sidebar / Thread List */}
@@ -178,26 +255,53 @@ export default function ChatPageClient({ profile, initialMessages }: ChatPageCli
                 </div>
 
                 <div className="overflow-y-auto flex-1 border-t border-gray-100">
-                    <div className="border-b border-gray-100 p-4 hover:bg-orange-50 cursor-pointer bg-orange-50 transition-colors border-l-4 border-l-orange-500">
-                        <h3 className="font-bold text-orange-600 mb-1">全体 タイムライン</h3>
-                        <p className="text-xs text-orange-500 bg-orange-100 px-2 py-1 rounded-full inline-block">新着あり</p>
-                    </div>
-                    {/* Dummy Data */}
-                    <div className="border-b border-gray-100 p-4 hover:bg-orange-50 cursor-pointer transition-colors">
-                        <h3 className="font-bold text-gray-700 mb-1">佐藤 健一 様 スレッド</h3>
-                        <p className="text-sm text-gray-400 truncate">体温36.5C、著変なし...</p>
-                    </div>
+                    {patients.map((patient) => (
+                        <div 
+                            key={patient.id} 
+                            onClick={() => setSelectedPatientId(patient.id)}
+                            className={`border-b border-gray-100 p-4 hover:bg-orange-50 cursor-pointer transition-colors ${selectedPatientId === patient.id ? 'bg-orange-50 border-l-4 border-l-orange-500' : ''}`}
+                        >
+                            <h3 className={`font-bold mb-1 ${selectedPatientId === patient.id ? 'text-orange-600' : 'text-gray-700'}`}>
+                                {patient.name} 様 スレッド
+                            </h3>
+                            <p className="text-sm text-gray-400 truncate">{patient.care_level} / {patient.insurance_type}</p>
+                        </div>
+                    ))}
                 </div>
             </aside>
 
             {/* Chat Area */}
-            <main className="flex-1 flex flex-col h-[calc(100vh-64px)] md:h-screen bg-[#FFFDF8]">
+            <main className="flex-1 flex flex-col h-[calc(100vh-64px)] md:h-screen bg-[#FFFDF8] relative pb-16 md:pb-0">
                 {/* Chat Header (PC) */}
-                <header className="hidden md:flex bg-white px-8 py-5 items-center justify-between border-b border-gray-100 shadow-sm z-10">
-                    <h1 className="text-xl font-bold text-gray-800">全体 タイムライン</h1>
-                    <button className="text-gray-400 hover:text-orange-500 transition-colors bg-orange-50 p-2 rounded-full">
+                <header className="hidden md:flex bg-white px-8 py-5 items-center justify-between border-b border-gray-100 shadow-sm z-10 relative">
+                    <h1 className="text-xl font-bold text-gray-800">
+                        {!selectedPatientId ? '全体 タイムライン' : `${patients.find(p => p.id === selectedPatientId)?.name || '不明'} 様 スレッド`}
+                    </h1>
+                    <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-gray-400 hover:text-orange-500 transition-colors bg-orange-50 p-2 rounded-full relative">
                         <Menu size={24} />
                     </button>
+
+                    {/* PC Dropdown Menu */}
+                    {isMenuOpen && (
+                        <div className="absolute top-[70px] right-8 bg-white shadow-xl rounded-2xl w-48 border border-gray-100 flex flex-col overflow-hidden z-30">
+                            <Link href="/nurse" className="flex items-center gap-2 p-4 border-b border-gray-50 text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors font-bold text-sm">
+                                <Users size={16} /> ナースホーム
+                            </Link>
+                            {profile.role === 'admin' && (
+                                <>
+                                    <Link href="/admin/dashboard" className="flex items-center gap-2 p-4 border-b border-gray-50 text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors font-bold text-sm">
+                                        <LayoutDashboard size={16} /> ダッシュボード
+                                    </Link>
+                                    <Link href="/admin/reconciliation" className="flex items-center gap-2 p-4 border-b border-gray-50 text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors font-bold text-sm">
+                                        <FileSpreadsheet size={16} /> CSV消込
+                                    </Link>
+                                </>
+                            )}
+                            <button onClick={handleLogout} className="flex items-center gap-2 p-4 text-red-600 hover:bg-red-50 transition-colors font-bold text-sm text-left">
+                                <LogOut size={16} /> ログアウト
+                            </button>
+                        </div>
+                    )}
                 </header>
 
                 {/* Messages */}
@@ -219,12 +323,12 @@ export default function ChatPageClient({ profile, initialMessages }: ChatPageCli
                                 </Link>
                             </div>
                         </div>
-                    ) : messages.length === 0 ? (
+                    ) : filteredMessages.length === 0 ? (
                         <div className="text-center text-gray-400 mt-10">
                             まだメッセージはありません。最初のメッセージを送信してみましょう。
                         </div>
                     ) : (
-                        messages.map((msg) => {
+                        filteredMessages.map((msg) => {
                         const isMine = msg.sender_id === profile.id;
 
                         // AIアラート（システム通知）の場合
@@ -261,7 +365,18 @@ export default function ChatPageClient({ profile, initialMessages }: ChatPageCli
                                         ? 'bg-orange-500 text-white rounded-br-sm' 
                                         : 'bg-white text-gray-700 rounded-bl-sm'
                                     }`}>
-                                        {msg.content}
+                                        {msg.content.includes('[IMAGE:') ? (
+                                            msg.content.split(/\n?\[IMAGE:(.*?)\]\n?/).map((part, i) => {
+                                                if (i % 2 === 1) { // 奇数インデックスは抽出されたURL
+                                                    return (
+                                                        <img key={i} src={part} alt="Uploaded" className="rounded-xl w-64 h-auto object-cover max-w-full my-2 shadow-sm border border-black/5" />
+                                                    );
+                                                }
+                                                return part ? <span key={i}>{part}</span> : null;
+                                            })
+                                        ) : (
+                                            msg.content
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -272,8 +387,29 @@ export default function ChatPageClient({ profile, initialMessages }: ChatPageCli
 
                 {/* Input Area */}
                 <div className="bg-white p-4 border-t border-gray-100 sticky bottom-0 z-10 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+                    {photoPreview && (
+                        <div className="mb-3 pl-14 relative w-24 h-24">
+                            <img src={photoPreview} alt="preview" className="rounded-xl w-full h-full object-cover border border-gray-200" />
+                            <button 
+                                onClick={() => { setPhoto(null); setPhotoPreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                                className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full p-1"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    )}
                     <div className="flex items-center gap-3">
-                        <button className="text-gray-400 hover:text-orange-500 transition-colors p-3 bg-gray-50 rounded-full active:scale-95">
+                        <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            ref={fileInputRef} 
+                            onChange={handleFileChange}
+                        />
+                        <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="text-gray-400 hover:text-orange-500 transition-colors p-3 bg-gray-50 rounded-full active:scale-95"
+                        >
                             <ImageIcon size={24} />
                         </button>
                         <div className="flex-1 relative">
@@ -297,13 +433,35 @@ export default function ChatPageClient({ profile, initialMessages }: ChatPageCli
                         </div>
                         <button 
                             onClick={handleSendMessage}
-                            disabled={isSubmitting || !newMessage.trim()}
+                            disabled={isSubmitting || (!newMessage.trim() && !photo)}
                             className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white p-4 rounded-full shadow-lg transition-transform active:scale-95 flex items-center justify-center"
                         >
                             <Send size={20} />
                         </button>
                     </div>
                 </div>
+
+                {/* Bottom Nav (Mobile Only) */}
+                <nav className="md:hidden fixed bottom-0 w-full bg-white border-t border-gray-100 px-6 py-4 flex justify-between items-center z-50 rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+                    <Link href="/nurse" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-400 transition-colors">
+                        <Home size={24} />
+                        <span className="text-[10px] font-bold">ホーム</span>
+                    </Link>
+                    <Link href="/chat" className="flex flex-col items-center gap-1 text-orange-500">
+                        <MessageSquare size={24} />
+                        <span className="text-[10px] font-bold">チャット</span>
+                    </Link>
+                    <button onClick={() => alert('予定画面は現在開発中です')} className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-400 transition-colors">
+                        <Calendar size={24} />
+                        <span className="text-[10px] font-bold">予定</span>
+                    </button>
+                    {profile.role === 'admin' && (
+                        <Link href="/admin/dashboard" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-400 transition-colors">
+                            <LayoutDashboard size={24} />
+                            <span className="text-[10px] font-bold">管理</span>
+                        </Link>
+                    )}
+                </nav>
             </main>
         </div>
     );

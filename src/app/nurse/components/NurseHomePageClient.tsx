@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Mic, Camera, FileText, CheckCircle, Home, MessageSquare, Calendar, Database as DatabaseIcon, Loader2 } from "lucide-react";
+import { Mic, Camera, FileText, CheckCircle, Home, MessageSquare, Calendar, Database as DatabaseIcon, Loader2, LayoutDashboard, User, ClipboardList } from "lucide-react";
 import { Database } from "@/types/supabase";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { saveVisitRecord } from "../actions";
 import { createClient } from "@/utils/supabase/client";
@@ -23,9 +24,21 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
     const [isSubmitting, setIsSubmitting] = useState(false);
     const router = useRouter();
 
+    // Select patient
+    const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+    
+    useEffect(() => {
+        if (patients.length > 0 && !selectedPatientId) {
+            setSelectedPatientId(patients[0].id);
+        }
+    }, [patients, selectedPatientId]);
+
     // Form inputs
     const [temperature, setTemperature] = useState("36.5");
     const [bloodPressure, setBloodPressure] = useState("");
+    const [visitType, setVisitType] = useState("看護訪問");
+    const [pulse, setPulse] = useState("");
+    const [spO2, setSpO2] = useState("");
     const [photo, setPhoto] = useState<File | null>(null);
 
     // Speech Recognition hook
@@ -85,11 +98,13 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
         try {
             const formData = new FormData();
             formData.append("tenant_id", profile.tenant_id ?? "");
-            formData.append("patient_id", patients[0].id); // default to first scheduled patient
+            formData.append("patient_id", selectedPatientId ?? patients[0].id);
             formData.append("nurse_id", profile.id);
-            formData.append("visit_type", "通常訪問"); // could be parameterized
+            formData.append("visit_type", (visitType === '看護訪問' || visitType === '緊急訪問') ? visitType : `リハビリ(${visitType})`);
             if (temperature) formData.append("temperature", temperature);
             if (bloodPressure) formData.append("blood_pressure", bloodPressure);
+            if (pulse) formData.append("pulse", pulse);
+            if (spO2) formData.append("spO2", spO2);
             if (transcript) formData.append("text_record", transcript);
             if (photo) formData.append("photo", photo);
 
@@ -101,6 +116,8 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
                 setSuccessMsg("記録を保存し、タイムラインに共有しました。");
                 setTemperature("36.5");
                 setBloodPressure("");
+                setPulse("");
+                setSpO2("");
                 setTranscript("");
                 setPhoto(null);
                 setTimeout(() => setSuccessMsg(""), 3000);
@@ -153,18 +170,37 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
             {/* Schedule / Cards */}
             <div className="p-4 mt-2 overflow-x-auto flex gap-4 snap-x">
                 {patients.length > 0 ? (
-                    patients.map((patient, index) => (
-                        <div key={patient.id} className={`bg-white min-w-[280px] p-5 rounded-3xl shadow-md snap-center ${index === 0 ? 'border-l-4 border-orange-500' : 'opacity-60'}`}>
-                            <div className="flex justify-between items-start mb-2">
-                                <span className="text-sm font-bold text-gray-400">予定時刻</span>
-                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${index === 0 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
-                                    {patient.care_level || "通常訪問"}
-                                </span>
+                    patients.map((patient, index) => {
+                        const isSelected = selectedPatientId === patient.id || (!selectedPatientId && index === 0);
+                        return (
+                            <div 
+                                key={patient.id} 
+                                onClick={() => setSelectedPatientId(patient.id)}
+                                className={`bg-white min-w-[280px] p-5 rounded-3xl shadow-md snap-center cursor-pointer transition-all ${isSelected ? 'border-l-4 border-orange-500 transform scale-100' : 'opacity-60 scale-95 border-l-4 border-transparent'}`}
+                            >
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-sm font-bold text-gray-400">予定時刻</span>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${isSelected ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
+                                        {patient.care_level || "通常訪問"}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center pr-2">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-gray-800">{patient.name} 様</h2>
+                                        <p className="text-sm text-gray-500 mt-1">{patient.insurance_type}</p>
+                                    </div>
+                                    <Link 
+                                        href={`/patient/${patient.id}`} 
+                                        onClick={(e) => e.stopPropagation()} 
+                                        className="bg-gray-100 hover:bg-orange-100 text-gray-600 hover:text-orange-500 p-3 rounded-full transition-colors flex items-center justify-center"
+                                        title="プロフィール・基本情報"
+                                    >
+                                        <User size={20} />
+                                    </Link>
+                                </div>
                             </div>
-                            <h2 className="text-xl font-bold text-gray-800">{patient.name} 様</h2>
-                            <p className="text-sm text-gray-500 mt-1">{patient.insurance_type}</p>
-                        </div>
-                    ))
+                        );
+                    })
                 ) : (
                     <div className="bg-white w-full p-8 rounded-3xl shadow-sm snap-center text-center flex flex-col items-center gap-4">
                         <div className="w-16 h-16 bg-gray-50 text-gray-500 rounded-full flex items-center justify-center">
@@ -183,9 +219,50 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
                 )}
             </div>
 
+            {/* Main Action Menus (Plans / Forms) */}
+            <div className="px-6 mt-4 grid grid-cols-2 gap-4">
+                <Link 
+                    href={`/nurse/plan?patient_id=${selectedPatientId}`}
+                    className="bg-white p-4 rounded-3xl shadow-sm flex flex-col items-center justify-center gap-2 hover:bg-orange-50 transition-colors border border-transparent hover:border-orange-100"
+                >
+                    <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center">
+                        <ClipboardList size={24} />
+                    </div>
+                    <span className="font-bold text-[11px] text-center text-gray-700">AI 計画書 / 報告書<br/>(看護)</span>
+                </Link>
+                <Link 
+                    href={`/rehab/plan?patient_id=${selectedPatientId}`}
+                    className="bg-white p-4 rounded-3xl shadow-sm flex flex-col items-center justify-center gap-2 hover:bg-orange-50 transition-colors border border-transparent hover:border-orange-100"
+                >
+                    <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center">
+                        <FileText size={24} />
+                    </div>
+                    <span className="font-bold text-[11px] text-center text-gray-700">AI 計画書 / 報告書<br/>(リハビリ)</span>
+                </Link>
+            </div>
+
             {/* Record Input Area */}
-            <div className="px-4 mt-4">
-                <h3 className="font-bold text-gray-700 mb-4 px-2">記録入力 {patients.length > 0 && `(${patients[0].name} 様)`}</h3>
+            <div className="px-4 mt-6">
+                <h3 className="font-bold text-gray-700 mb-4 px-2">
+                    訪問記録入力 {patients.length > 0 && `(${patients.find(p => p.id === selectedPatientId)?.name || patients[0].name} 様)`}
+                </h3>
+
+                {/* Visit Type Selection */}
+                <div className="flex gap-2 mb-4">
+                    {['看護訪問', '緊急訪問', 'PT', 'OT', 'ST'].map(type => (
+                        <button 
+                            key={type}
+                            onClick={() => setVisitType(type)}
+                            className={`flex-1 py-3 rounded-2xl font-bold text-xs transition-colors shadow-sm ${
+                                visitType === type 
+                                ? 'bg-orange-500 text-white' 
+                                : 'bg-white text-gray-500 hover:bg-orange-50 border border-gray-100'
+                            }`}
+                        >
+                            {type}
+                        </button>
+                    ))}
+                </div>
 
                 {/* Vitals */}
                 <div className="grid grid-cols-2 gap-4 mb-4">
@@ -210,6 +287,30 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
                             className="text-3xl font-bold text-center w-full focus:outline-none text-gray-800" 
                         />
                     </div>
+                    {(visitType !== '看護訪問' && visitType !== '緊急訪問') && (
+                        <>
+                            <div className="bg-white p-4 rounded-3xl shadow-sm flex flex-col justify-center items-center">
+                                <span className="text-xs text-gray-400 font-bold mb-1">脈拍</span>
+                                <input 
+                                    type="number" 
+                                    value={pulse}
+                                    onChange={(e) => setPulse(e.target.value)}
+                                    placeholder="70" 
+                                    className="text-3xl font-bold text-center w-full focus:outline-none text-gray-800" 
+                                />
+                            </div>
+                            <div className="bg-white p-4 rounded-3xl shadow-sm flex flex-col justify-center items-center">
+                                <span className="text-xs text-gray-400 font-bold mb-1">SpO2 (%)</span>
+                                <input 
+                                    type="number" 
+                                    value={spO2}
+                                    onChange={(e) => setSpO2(e.target.value)}
+                                    placeholder="98" 
+                                    className="text-3xl font-bold text-center w-full focus:outline-none text-gray-800" 
+                                />
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Text & Voice Input */}
@@ -261,18 +362,24 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
 
             {/* Bottom Nav */}
             <nav className="fixed bottom-0 w-full bg-white border-t border-gray-100 px-6 py-4 flex justify-between items-center z-50 rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-                <button className="flex flex-col items-center gap-1 text-orange-500">
+                <Link href="/nurse" className="flex flex-col items-center gap-1 text-orange-500">
                     <Home size={24} />
                     <span className="text-[10px] font-bold">ホーム</span>
-                </button>
-                <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-400 transition-colors">
+                </Link>
+                <Link href="/chat" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-400 transition-colors">
                     <MessageSquare size={24} />
                     <span className="text-[10px] font-bold">チャット</span>
-                </button>
-                <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-400 transition-colors">
+                </Link>
+                <button onClick={() => alert('予定画面は現在開発中です')} className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-400 transition-colors">
                     <Calendar size={24} />
                     <span className="text-[10px] font-bold">予定</span>
                 </button>
+                {profile.role === 'admin' && (
+                    <Link href="/admin/dashboard" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-400 transition-colors">
+                        <LayoutDashboard size={24} />
+                        <span className="text-[10px] font-bold">管理</span>
+                    </Link>
+                )}
             </nav>
         </div>
     );
