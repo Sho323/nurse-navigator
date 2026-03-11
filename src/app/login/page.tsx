@@ -1,5 +1,8 @@
+"use client";
+
 import { LogIn } from "lucide-react";
 import Link from "next/link";
+import { createClient } from "@/utils/supabase/client";
 
 export default function LoginPage() {
     return (
@@ -13,7 +16,18 @@ export default function LoginPage() {
                     <p className="text-sm text-gray-500 mt-2">日々の業務をシンプルに。</p>
                 </div>
 
-                <button className="w-full bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 transition-colors duration-200">
+                <button
+                    onClick={async () => {
+                        const supabase = createClient();
+                        await supabase.auth.signInWithOAuth({
+                            provider: "google",
+                            options: {
+                                redirectTo: `${window.location.origin}/auth/callback`,
+                            },
+                        });
+                    }}
+                    className="w-full bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 transition-colors duration-200"
+                >
                     <LogIn size={20} />
                     Googleでログイン
                 </button>
