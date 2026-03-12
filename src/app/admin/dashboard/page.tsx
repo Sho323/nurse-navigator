@@ -86,7 +86,7 @@ export default async function AdminDashboardPage() {
                         <AlertCircle size={20} />
                         加算・アラート一覧
                     </Link>
-                    <Link href="#" className="flex items-center gap-3 text-gray-500 hover:text-orange-500 hover:bg-orange-50 px-4 py-3 rounded-2xl font-bold transition-colors">
+                    <Link href="/admin/reconciliation" className="flex items-center gap-3 text-gray-500 hover:text-orange-500 hover:bg-orange-50 px-4 py-3 rounded-2xl font-bold transition-colors">
                         <FileSpreadsheet size={20} />
                         CSV 消込
                     </Link>
