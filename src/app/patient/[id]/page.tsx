@@ -3,14 +3,14 @@ import { getUserProfile } from "@/utils/supabase/api";
 import { redirect } from "next/navigation";
 import PatientProfileClient from "./components/PatientProfileClient";
 
-export default async function PatientProfilePage({ params }: { params: { id: string } }) {
+export default async function PatientProfilePage({ params }: { params: Promise<{ id: string }> }) {
     const profile = await getUserProfile();
     
     if (!profile) {
         redirect("/login");
     }
 
-    const { id: patientId } = params;
+    const { id: patientId } = await params;
     const supabase = await createClient();
 
     const { data: patient, error } = await supabase

@@ -12,14 +12,24 @@ export async function getUserProfile() {
         .from("profiles")
         .select("*")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
         
-    // デモ用: 常に管理者権限として返す
-    if (profile) {
-        profile.role = 'admin';
+    // 営業・デモ用の一時的な設定:
+    // ログインしているユーザーは全員「管理者」として扱う
+    if (!profile) {
+        return {
+            id: user.id,
+            full_name: user.user_metadata?.full_name || "デモユーザー",
+            role: 'admin',
+            tenant_id: 'demo-tenant' // テナントチェックをパスさせるためのダミー
+        };
     }
 
-    return profile;
+    // 既存ユーザーも強制的に管理者に
+    return {
+        ...profile,
+        role: 'admin'
+    };
 }
 
 export async function getTenants() {
