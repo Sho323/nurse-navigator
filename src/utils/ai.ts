@@ -28,6 +28,12 @@ export async function checkBillingRules({
         return; // Skip if no text or no key
     }
 
+    // M0 Hotfix: PII保護のための送信ブロック
+    if (process.env.COMPLIANCE_ENFORCED === "true") {
+        console.warn(`[COMPLIANCE_ENFORCED] 警告: PII保護のため訪問記録(textRecord)のOpenAI送信をブロックしました。 (tenantId: ${tenantId}, visitRecordId: ${visitRecordId})`);
+        return;
+    }
+
     try {
         const prompt = `
 あなたは訪問看護ステーションの優秀な医療事務・レセプトチェッカー（AIアシスタント）です。

@@ -18,13 +18,41 @@ export async function processReconciliation(formData: FormData) {
     }
 
     try {
+        // M0 Hotfix: PIIマスキング
+        let promptReceiptCsvStr = receiptCsvStr;
+        const nameMap = new Map<string, string>();
+
+        if (process.env.COMPLIANCE_ENFORCED === 'true') {
+            console.warn(`[COMPLIANCE_ENFORCED] 警告: PII保護のため患者名をマスキングしてOpenAIへ送信します: tenantId=${tenant_id}`);
+            const lines = receiptCsvStr.split('\n');
+            if (lines.length > 0) {
+                const headers = lines[0].split(',');
+                const nameIdx = headers.findIndex(h => /患者|氏名|名前|name/i.test(h));
+                if (nameIdx !== -1) {
+                    promptReceiptCsvStr = lines.map((line, idx) => {
+                        if (idx === 0) return line;
+                        const cols = line.split(',');
+                        if (cols.length > nameIdx && cols[nameIdx]) {
+                            const originalName = cols[nameIdx].trim();
+                            if (originalName) {
+                                const maskedName = `患者${idx}`;
+                                nameMap.set(maskedName, originalName);
+                                cols[nameIdx] = maskedName;
+                            }
+                        }
+                        return cols.join(',');
+                    }).join('\n');
+                }
+            }
+        }
+
         const prompt = `
 あなたは医療事務の消込（入金確認）のプロフェッショナルです。
 以下の「請求データ（レセプト）」と「入金データ（銀行）」を比較し、AIによる自動消込を行ってください。
 入金データはカタカナであったり、家族名義であったり、一部未払いがあったりする場合があります。
 
 【請求データ (CSV)】
-${receiptCsvStr}
+${promptReceiptCsvStr}
 
 【入金データ (CSV)】
 ${bankCsvStr}
@@ -58,7 +86,13 @@ ${bankCsvStr}
         // GPTがマークダウンでjsonブロックを返した場合の対策
         const cleanJsonStr = resultJsonStr.replace(/```json/g, "").replace(/```/g, "").trim();
         const parsed = JSON.parse(cleanJsonStr);
-        const results = parsed.results;
+        // M0 Hotfix: PIIマスキング解除（アンマスキング）
+        const results = parsed.results.map((r: any) => {
+            if (process.env.COMPLIANCE_ENFORCED === 'true' && r.patient_name && nameMap.has(r.patient_name)) {
+                r.patient_name = nameMap.get(r.patient_name);
+            }
+            return r;
+        });
 
         // RLSをバイパスするためAdminクライアントを使用（sales_dataはadminロール限定のため）
         const supabaseAdmin = createSupabaseClient(
