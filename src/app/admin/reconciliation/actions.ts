@@ -55,7 +55,9 @@ ${bankCsvStr}
              throw new Error("AI failed to return response");
         }
 
-        const parsed = JSON.parse(resultJsonStr);
+        // GPTがマークダウンでjsonブロックを返した場合の対策
+        const cleanJsonStr = resultJsonStr.replace(/```json/g, "").replace(/```/g, "").trim();
+        const parsed = JSON.parse(cleanJsonStr);
         const results = parsed.results;
 
         // RLSをバイパスするためAdminクライアントを使用（sales_dataはadminロール限定のため）
