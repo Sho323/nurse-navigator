@@ -96,7 +96,8 @@ export async function saveVisitRecord(formData: FormData) {
         is_system_alert: false
     });
 
-    // 記録内容を非同期でAIによる加算チェックへ渡す（完了を待たない）
+    // Vercelのサーバーレス環境では、レスポンス返却後にプロセスが終了するため
+    // awaitで確実にAI解析（加算チェック）が完了するのを待つ
     const combinedRecordForAi = `
     脈拍: ${pulse || '未記入'}
     SpO2: ${spO2 || '未記入'}
@@ -104,15 +105,18 @@ export async function saveVisitRecord(formData: FormData) {
     `.trim();
 
     if (text_record || pulse || spO2) {
-        import("@/utils/ai").then((module) => {
-            module.checkBillingRules({
+        try {
+            const { checkBillingRules } = await import("@/utils/ai");
+            await checkBillingRules({
                 textRecord: combinedRecordForAi,
                 tenantId: tenant_id,
                 patientId: patient_id,
                 visitRecordId: visitRecord.id,
                 nurseId: nurse_id,
             });
-        }).catch(err => console.error(err));
+        } catch (err) {
+            console.error("AI加算チェックエラー:", err);
+        }
     }
 
     return { success: true, data: visitRecord };
