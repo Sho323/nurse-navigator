@@ -17,11 +17,15 @@ export async function getUserProfile() {
     // 営業・デモ用の一時的な設定:
     // ログインしているユーザーは全員「管理者」として扱う
     if (!profile) {
+        // UUID形式エラーを防ぐため、実在する最初のテナントIDを取得してみる
+        const { data: tenants } = await supabase.from("tenants").select("id").limit(1);
+        const firstTenantId = tenants && tenants.length > 0 ? tenants[0].id : user.id; // フォールバック
+
         return {
             id: user.id,
             full_name: user.user_metadata?.full_name || "デモユーザー",
             role: 'admin',
-            tenant_id: 'demo-tenant' // テナントチェックをパスさせるためのダミー
+            tenant_id: firstTenantId
         };
     }
 
