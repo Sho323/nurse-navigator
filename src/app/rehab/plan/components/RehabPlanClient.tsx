@@ -24,7 +24,7 @@ export default function RehabPlanClient({ patients }: RehabPlanClientProps) {
         // Simulate AI generating a rehab plan based on past records
         setTimeout(() => {
             const patient = patients.find(p => p.id === selectedPatientId);
-            setGeneratedPlan(`【リハビリテーション${planType}案】\n\n対象：${patient?.name} 様\n要介護度：${patient?.care_level}\n\n■ 短期目標\n・屋内での歩行を安全に行える（T字杖使用）\n・トイレ動作の自立\n\n■ 訓練内容・頻度\n・PTによる訪問（週2回、40分）\n・ROMエクスササイズ（下肢中心）\n・起立・着座訓練\n・歩行訓練（屋内実用歩行）\n\n■ 特記事項\n・疼痛（右膝関節）に配慮し、運動負荷を調整する。\n・前回カンファレンス時のケアマネージャーからの報告「夜間のトイレ移動での転倒不安あり」を受け、環境調整（手すりの確認と導線整理）を併せて評価する。\n\n※この案は過去の訪問記録と他職種連携記録からAIが自動生成しました。必ず療法士が確認・修正の上、主治医へ報告してください。`);
+            setGeneratedPlan(`【リハビリテーション${planType}案】\n\n対象：${patient?.name} 様\n要介護度：${patient?.care_level}\n\n■ 短期目標\n・屋内での歩行を安全に行える（T字杖使用）\n・トイレ動作の自立\n\n■ 訓練内容・頻度\n・PTによる訪問（週2回、40分）\n・ROMエクスササイズ（下肢中心）\n・起立・着座訓練\n・歩行訓練（屋内実用歩行）\n\n■ 特記事項\n・疼痛（右膝関節）に配慮し、運動負荷を調整する。\n・前回カンファレンス時のケアマネージャーからの報告「夜間のトイレ移動での転倒不安あり」を受け、環境調整（手すりの確認と導線整理）を併せて評価する。\n\n※この案は過去の訪問記録と他職種連携記録から自動生成しました。必ず療法士が確認・修正の上、主治医へ報告してください。`);
             setIsGenerating(false);
         }, 1500);
     };
@@ -36,7 +36,7 @@ export default function RehabPlanClient({ patients }: RehabPlanClientProps) {
                 <Link href="/rehab" className="text-gray-400 hover:text-orange-500 transition-colors">
                     <ArrowLeft size={24} />
                 </Link>
-                <h1 className="text-xl font-extrabold text-gray-800 tracking-tight">AI リハビリ計画書作成</h1>
+                <h1 className="text-xl font-extrabold text-gray-800 tracking-tight">リハビリ計画書作成</h1>
                 <div className="w-6"></div> {/* Spacer for centering */}
             </header>
 
@@ -81,7 +81,7 @@ export default function RehabPlanClient({ patients }: RehabPlanClientProps) {
                     className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-4 rounded-2xl flex justify-center items-center gap-2 transition-all shadow-md active:scale-[0.98]"
                 >
                     {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <RefreshCw size={24} />}
-                    {isGenerating ? 'AIが実績と連携内容を解析中...' : '過去記録からドラフト生成'}
+                    {isGenerating ? '実績と連携内容を解析中...' : '過去記録からドラフト生成'}
                 </button>
 
                 {generatedPlan && (

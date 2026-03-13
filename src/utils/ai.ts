@@ -197,7 +197,7 @@ export async function checkBillingRules({
                     `${index + 1}. ${detection.alertType}（検知: ${detection.matchedKeywords.join(" / ")}）\n${detection.missingInfo}`
             ),
             "",
-            "（本通知は外部AIではなくキーワードルールで生成されています）",
+            "（本通知はキーワードルールで生成されています）",
         ].join("\n");
 
         await supabaseAdmin.from("messages").insert({

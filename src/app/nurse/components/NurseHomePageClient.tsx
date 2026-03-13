@@ -228,7 +228,7 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
                     <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center">
                         <ClipboardList size={24} />
                     </div>
-                    <span className="font-bold text-[11px] text-center text-gray-700">AI 計画書 / 報告書<br/>(看護)</span>
+                    <span className="font-bold text-[11px] text-center text-gray-700">計画書 / 報告書<br/>(看護)</span>
                 </Link>
                 <Link 
                     href={`/rehab/plan?patient_id=${selectedPatientId}`}
@@ -237,7 +237,7 @@ export default function NurseHomePageClient({ profile, patients }: NurseHomePage
                     <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center">
                         <FileText size={24} />
                     </div>
-                    <span className="font-bold text-[11px] text-center text-gray-700">AI 計画書 / 報告書<br/>(リハビリ)</span>
+                    <span className="font-bold text-[11px] text-center text-gray-700">計画書 / 報告書<br/>(リハビリ)</span>
                 </Link>
             </div>
 

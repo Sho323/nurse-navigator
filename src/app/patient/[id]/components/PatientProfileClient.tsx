@@ -115,14 +115,14 @@ export default function PatientProfileClient({ patient, aiConsent, consentEvents
             <main className="w-full max-w-2xl px-6 mt-8 space-y-6">
                 <section className="bg-white p-6 rounded-3xl shadow-sm border border-orange-100">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-sm font-bold text-gray-500">AI利用同意（CONS-000）</h2>
+                        <h2 className="text-sm font-bold text-gray-500">加算チェック利用同意（CONS-000）</h2>
                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${consentClassName}`}>
                             {consentLabel}
                         </span>
                     </div>
 
                     <p className="text-xs text-gray-500 mb-4">
-                        AI加算チェックの実行には本同意が必要です。撤回すると次回以降のAI送信は停止されます。
+                        加算チェックの実行には本同意が必要です。撤回すると次回以降のチェック処理は停止されます。
                     </p>
 
                     <div className="grid grid-cols-2 gap-3 mb-3">

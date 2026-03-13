@@ -2,7 +2,7 @@ import "./globals.css";
 
 export const metadata = {
   title: "Nurse Navigator",
-  description: "AI経営・加算ナビゲーションシステム",
+  description: "経営・加算ナビゲーションシステム",
 };
 
 export default function RootLayout({

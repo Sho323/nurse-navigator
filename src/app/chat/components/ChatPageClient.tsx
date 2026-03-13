@@ -265,7 +265,7 @@ export default function ChatPageClient({ profile, initialMessages, patients, aiC
                             </h3>
                             <p className="text-sm text-gray-400 truncate">{patient.care_level} / {patient.insurance_type}</p>
                             <span className={`inline-flex mt-2 px-2 py-1 rounded-full text-[10px] font-bold ${aiConsentByPatientId[patient.id] ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                                {aiConsentByPatientId[patient.id] ? "AI同意: 取得済み" : "AI同意: 未取得"}
+                                {aiConsentByPatientId[patient.id] ? "同意: 取得済み" : "同意: 未取得"}
                             </span>
                         </div>
                     ))}
@@ -391,9 +391,7 @@ export default function ChatPageClient({ profile, initialMessages, patients, aiC
                 <div className="bg-white p-4 border-t border-gray-100 sticky bottom-0 z-10 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
                     {selectedPatientId && !selectedPatientHasAiConsent && (
                         <div className="mb-3 bg-red-50 border border-red-200 rounded-2xl p-3">
-                            <p className="text-xs font-bold text-red-700">
-                                この利用者はAI同意が未取得です。AI加算チェックは実行されません。
-                            </p>
+                            <p className="text-xs font-bold text-red-700">この利用者は同意が未取得です。加算チェックは実行されません。</p>
                             <Link
                                 href={`/patient/${selectedPatientId}`}
                                 className="text-xs font-bold text-red-600 underline mt-1 inline-block"

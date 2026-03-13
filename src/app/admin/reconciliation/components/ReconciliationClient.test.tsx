@@ -28,7 +28,7 @@ describe('ReconciliationClient Component', () => {
         const user = userEvent.setup();
         render(<ReconciliationClient profile={mockProfile} initialData={[]} />);
 
-        const submitButton = screen.getByRole('button', { name: /アップロードしたCSVでAI消込を開始/i });
+        const submitButton = screen.getByRole('button', { name: /アップロードしたCSVで自動消込を開始/i });
         
         // 初期状態では無効化されている
         expect(submitButton).toBeDisabled();
@@ -52,7 +52,7 @@ describe('ReconciliationClient Component', () => {
         expect(submitButton).not.toBeDisabled();
     });
 
-    it('アップロード後、AI解析APIから成功レスポンスが返ってきた際、完了メッセージが表示されること', async () => {
+    it('アップロード後、消込APIから成功レスポンスが返ってきた際、完了メッセージが表示されること', async () => {
         // processReconciliationが成功レスポンスを返すようにモック
         (processReconciliation as jest.Mock).mockResolvedValue({ success: true });
 
@@ -71,12 +71,12 @@ describe('ReconciliationClient Component', () => {
         await user.upload(inputs[1] as HTMLInputElement, dummyCsv2);
 
         // ボタンをクリック
-        const submitButton = screen.getByRole('button', { name: /アップロードしたCSVでAI消込を開始/i });
+        const submitButton = screen.getByRole('button', { name: /アップロードしたCSVで自動消込を開始/i });
         fireEvent.click(submitButton);
 
         // メッセージが表示されるのを待機
         await waitFor(() => {
-            expect(screen.getByText('AIによる消込処理が完了しました。')).toBeInTheDocument();
+            expect(screen.getByText('ルールベースの消込処理が完了しました。')).toBeInTheDocument();
         });
 
         // サーバーアクションが呼ばれたことを確認 (FormDataの中身までは検証を省略)

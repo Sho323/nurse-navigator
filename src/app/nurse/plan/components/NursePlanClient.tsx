@@ -24,7 +24,7 @@ export default function NursePlanClient({ patients }: RehabPlanClientProps) {
         // Simulate AI generating a rehab plan based on past records
         setTimeout(() => {
             const patient = patients.find(p => p.id === selectedPatientId);
-            setGeneratedPlan(`【訪問看護${planType}案】\n\n対象：${patient?.name} 様\n要介護度：${patient?.care_level}\n\n■ 看護目標\n・バイタルサインの安定、脱水・感染症の予防\n・内服管理の自立に向けた支援と環境調整\n\n■ 訪問内容\n・健康状態の観察（バイタルチェック、全身状態の確認）\n・服薬管理状況の確認と指導\n・リハビリスタッフと連携した生活動線の確認\n\n■ 特記事項\n・前回訪問時、下肢の浮腫がみられたため、今回も継続して観察とマッサージを行う。\n・ケアマネージャーからの「服薬カレンダーのセット漏れがある」という情報をもとに、ご本人およびご家族へセット方法の再確認と指導を実施。\n\n※この案は過去の訪問記録と他職種連携記録からAIが自動生成しました。必ず看護師が確認・修正の上、主治医へ報告してください。`);
+            setGeneratedPlan(`【訪問看護${planType}案】\n\n対象：${patient?.name} 様\n要介護度：${patient?.care_level}\n\n■ 看護目標\n・バイタルサインの安定、脱水・感染症の予防\n・内服管理の自立に向けた支援と環境調整\n\n■ 訪問内容\n・健康状態の観察（バイタルチェック、全身状態の確認）\n・服薬管理状況の確認と指導\n・リハビリスタッフと連携した生活動線の確認\n\n■ 特記事項\n・前回訪問時、下肢の浮腫がみられたため、今回も継続して観察とマッサージを行う。\n・ケアマネージャーからの「服薬カレンダーのセット漏れがある」という情報をもとに、ご本人およびご家族へセット方法の再確認と指導を実施。\n\n※この案は過去の訪問記録と他職種連携記録から自動生成しました。必ず看護師が確認・修正の上、主治医へ報告してください。`);
             setIsGenerating(false);
         }, 1500);
     };
@@ -36,7 +36,7 @@ export default function NursePlanClient({ patients }: RehabPlanClientProps) {
                 <Link href="/nurse" className="text-gray-400 hover:text-orange-500 transition-colors">
                     <ArrowLeft size={24} />
                 </Link>
-                <h1 className="text-xl font-extrabold text-gray-800 tracking-tight">AI {planType}策定</h1>
+                <h1 className="text-xl font-extrabold text-gray-800 tracking-tight">{planType}策定</h1>
                 <div className="w-6"></div> {/* Spacer for centering */}
             </header>
 
@@ -81,7 +81,7 @@ export default function NursePlanClient({ patients }: RehabPlanClientProps) {
                     className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-4 rounded-2xl flex justify-center items-center gap-2 transition-all shadow-md active:scale-[0.98]"
                 >
                     {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <RefreshCw size={24} />}
-                    {isGenerating ? 'AIが実績と連携内容を解析中...' : '過去記録からドラフト生成'}
+                    {isGenerating ? '実績と連携内容を解析中...' : '過去記録からドラフト生成'}
                 </button>
 
                 {generatedPlan && (

@@ -59,7 +59,7 @@ export default function RehabHomePageClient({ profile, patients }: RehabHomePage
             if (result?.error) {
                 alert(`エラーが発生しました: ${result.error}`);
             } else {
-                alert("リハビリ記録を保存しました。\n※ AIが連携加算の候補や計画書の修正が必要か解析を開始しました。");
+                alert("リハビリ記録を保存しました。\n※ 連携加算の候補や計画書の修正要否チェックを開始しました。");
                 setBloodPressure("");
                 setPulse("");
                 setSpO2("");
