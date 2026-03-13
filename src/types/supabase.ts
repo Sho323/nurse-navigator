@@ -59,6 +59,156 @@ export type Database = {
           },
         ]
       }
+      consent_events: {
+        Row: {
+          action: string
+          consent_id: string
+          consent_status_after: string
+          consent_status_before: string | null
+          consent_type: string
+          consented_by_kind: string | null
+          created_at: string
+          id: string
+          metadata: Json
+          notes: string | null
+          patient_id: string
+          performed_by_user_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          consent_id: string
+          consent_status_after: string
+          consent_status_before?: string | null
+          consent_type: string
+          consented_by_kind?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          patient_id: string
+          performed_by_user_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          consent_id?: string
+          consent_status_after?: string
+          consent_status_before?: string | null
+          consent_type?: string
+          consented_by_kind?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          patient_id?: string
+          performed_by_user_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consent_events_consent_id_fkey"
+            columns: ["consent_id"]
+            isOneToOne: false
+            referencedRelation: "consents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consent_events_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consent_events_performed_by_user_id_fkey"
+            columns: ["performed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consent_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consents: {
+        Row: {
+          consent_type: string
+          consented_at: string
+          consented_by_kind: string
+          consented_by_user_id: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          patient_id: string
+          policy_version: string
+          revoked_at: string | null
+          source: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          consent_type: string
+          consented_at?: string
+          consented_by_kind?: string
+          consented_by_user_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          patient_id: string
+          policy_version?: string
+          revoked_at?: string | null
+          source?: string
+          status: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          consent_type?: string
+          consented_at?: string
+          consented_by_kind?: string
+          consented_by_user_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          patient_id?: string
+          policy_version?: string
+          revoked_at?: string | null
+          source?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consents_consented_by_user_id_fkey"
+            columns: ["consented_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consents_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string

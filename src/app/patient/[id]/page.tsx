@@ -1,14 +1,10 @@
 import { createClient } from "@/utils/supabase/server";
-import { getUserProfile } from "@/utils/supabase/api";
-import { redirect } from "next/navigation";
+import { requireUserProfile } from "@/utils/supabase/authorization";
 import PatientProfileClient from "./components/PatientProfileClient";
+import { AI_CONSENT_TYPE } from "@/utils/consent";
 
 export default async function PatientProfilePage({ params }: { params: Promise<{ id: string }> }) {
-    const profile = await getUserProfile();
-    
-    if (!profile) {
-        redirect("/login");
-    }
+    const profile = await requireUserProfile();
 
     const { id: patientId } = await params;
     const supabase = await createClient();
@@ -29,11 +25,32 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
     }
 
     // Only allow access if the patient belongs to the user's tenant
-    if (patient.tenant_id !== profile.tenant_id && profile.role !== 'admin') {
+    if (patient.tenant_id !== profile.tenant_id) {
          return <div className="p-8 text-center text-red-500">アクセス権限がありません</div>;
     }
 
+    const { data: aiConsent } = await supabase
+        .from("consents")
+        .select("*")
+        .eq("tenant_id", profile.tenant_id)
+        .eq("patient_id", patient.id)
+        .eq("consent_type", AI_CONSENT_TYPE)
+        .maybeSingle();
+
+    const { data: consentEvents } = await supabase
+        .from("consent_events")
+        .select("*")
+        .eq("tenant_id", profile.tenant_id)
+        .eq("patient_id", patient.id)
+        .eq("consent_type", AI_CONSENT_TYPE)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
     return (
-        <PatientProfileClient profile={profile} patient={patient} />
+        <PatientProfileClient
+            patient={patient}
+            aiConsent={aiConsent}
+            consentEvents={consentEvents || []}
+        />
     );
 }

@@ -2,11 +2,8 @@
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+import { getUserProfile } from "@/utils/supabase/api";
+import { reconcileCsv } from "@/utils/reconciliation";
 
 export async function processReconciliation(formData: FormData) {
     const receiptCsvStr = formData.get("receiptCsv") as string;
@@ -18,87 +15,35 @@ export async function processReconciliation(formData: FormData) {
     }
 
     try {
-        // M0 Hotfix: PIIマスキング
-        let promptReceiptCsvStr = receiptCsvStr;
-        const nameMap = new Map<string, string>();
-
-        if (process.env.COMPLIANCE_ENFORCED === 'true') {
-            console.warn(`[COMPLIANCE_ENFORCED] 警告: PII保護のため患者名をマスキングしてOpenAIへ送信します: tenantId=${tenant_id}`);
-            const lines = receiptCsvStr.split('\n');
-            if (lines.length > 0) {
-                const headers = lines[0].split(',');
-                const nameIdx = headers.findIndex(h => /患者|氏名|名前|name/i.test(h));
-                if (nameIdx !== -1) {
-                    promptReceiptCsvStr = lines.map((line, idx) => {
-                        if (idx === 0) return line;
-                        const cols = line.split(',');
-                        if (cols.length > nameIdx && cols[nameIdx]) {
-                            const originalName = cols[nameIdx].trim();
-                            if (originalName) {
-                                const maskedName = `患者${idx}`;
-                                nameMap.set(maskedName, originalName);
-                                cols[nameIdx] = maskedName;
-                            }
-                        }
-                        return cols.join(',');
-                    }).join('\n');
-                }
-            }
+        const profile = await getUserProfile();
+        if (!profile || profile.role !== "admin") {
+            return { error: "管理者権限が必要です" };
         }
-
-        const prompt = `
-あなたは医療事務の消込（入金確認）のプロフェッショナルです。
-以下の「請求データ（レセプト）」と「入金データ（銀行）」を比較し、AIによる自動消込を行ってください。
-入金データはカタカナであったり、家族名義であったり、一部未払いがあったりする場合があります。
-
-【請求データ (CSV)】
-${promptReceiptCsvStr}
-
-【入金データ (CSV)】
-${bankCsvStr}
-
-以下のJSON形式で各請求データに対する推論結果を出力してください。キーは必ず英語にしてください。
-{
-  "results": [
-    {
-      "patient_name": "請求データにある患者名",
-      "billed_amount": "請求額(数値)",
-      "received_amount": "入金データからマッチした入金額(数値)。見つからない場合はnull",
-      "status": "matched (完全一致) | inferred (名義違いだが一致、または少額の差額等を推論済) | error (金額が大きく異なる、または見つからない場合)",
-      "ai_comment": "判定の理由。特にinferredやerrorの場合は詳しく（例：「入金名義が家族（太郎様）の可能性がありますが、金額から同一の方と推論しました」など）"
-    }
-  ]
-}
-`;
-
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-            temperature: 0,
-        });
-
-        const resultJsonStr = response.choices[0].message.content;
-        if (!resultJsonStr) {
-             throw new Error("AI failed to return response");
+        if (profile.tenant_id !== tenant_id) {
+            return { error: "テナントが一致しません" };
         }
-
-        // GPTがマークダウンでjsonブロックを返した場合の対策
-        const cleanJsonStr = resultJsonStr.replace(/```json/g, "").replace(/```/g, "").trim();
-        const parsed = JSON.parse(cleanJsonStr);
-        // M0 Hotfix: PIIマスキング解除（アンマスキング）
-        const results = parsed.results.map((r: any) => {
-            if (process.env.COMPLIANCE_ENFORCED === 'true' && r.patient_name && nameMap.has(r.patient_name)) {
-                r.patient_name = nameMap.get(r.patient_name);
-            }
-            return r;
-        });
 
         // RLSをバイパスするためAdminクライアントを使用（sales_dataはadminロール限定のため）
         const supabaseAdmin = createSupabaseClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
+
+        const { data: patientMaster, error: patientError } = await supabaseAdmin
+            .from("patients")
+            .select("name, kana_name")
+            .eq("tenant_id", tenant_id);
+
+        if (patientError) {
+            console.error("Patient master fetch error:", patientError);
+            return { error: "患者マスタの取得に失敗しました" };
+        }
+
+        const results = reconcileCsv({
+            receiptCsv: receiptCsvStr,
+            bankCsv: bankCsvStr,
+            patientMaster: patientMaster || [],
+        });
         
         // （MVP仕様）以前の推論データを一旦クリアする
         await supabaseAdmin
@@ -107,13 +52,13 @@ ${bankCsvStr}
             .eq("tenant_id", tenant_id)
             .eq("target_month", "2026-03");
 
-        const insertData = results.map((r: any) => ({
+        const insertData = results.map((result) => ({
             tenant_id,
-            patient_name: r.patient_name,
-            billed_amount: Number(r.billed_amount),
-            received_amount: r.received_amount ? Number(r.received_amount) : null,
-            status: r.status,
-            ai_comment: r.ai_comment,
+            patient_name: result.patient_name,
+            billed_amount: result.billed_amount,
+            received_amount: result.received_amount,
+            status: result.status,
+            ai_comment: result.ai_comment ?? null,
             target_month: "2026-03" 
         }));
 
@@ -126,8 +71,9 @@ ${bankCsvStr}
         revalidatePath("/admin/reconciliation");
         return { success: true };
 
-    } catch (e: any) {
-        console.error("Reconciliation Error:", e);
-        return { error: e.message };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "不明なエラーが発生しました";
+        console.error("Reconciliation Error:", error);
+        return { error: message };
     }
 }

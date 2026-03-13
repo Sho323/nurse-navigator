@@ -1,15 +1,9 @@
-import { createClient } from "@/utils/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { getUserProfile } from "@/utils/supabase/api";
-import { redirect } from "next/navigation";
+import { requireAdminProfile } from "@/utils/supabase/authorization";
 import ReconciliationClient from "./components/ReconciliationClient";
 
 export default async function ReconciliationPage() {
-    const profile = await getUserProfile();
-
-    if (!profile) {
-        redirect("/login");
-    }
+    const profile = await requireAdminProfile();
 
     // admin-only RLSをバイパスするためService Role Keyを使用
     const supabaseAdmin = createSupabaseClient(

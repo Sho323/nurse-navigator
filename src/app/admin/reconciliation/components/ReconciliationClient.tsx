@@ -1,14 +1,15 @@
 "use client";
 
-import { UploadCloud, CheckCircle, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, Users, Loader2 } from "lucide-react";
+import { UploadCloud, CheckCircle, AlertTriangle, FileSpreadsheet, LayoutDashboard, Users, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { processReconciliation } from "../actions";
 import { Database } from "@/types/supabase";
 
 type SalesData = Database["public"]["Tables"]["sales_data"]["Row"];
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
-export default function ReconciliationClient({ profile, initialData }: { profile: any, initialData: SalesData[] }) {
+export default function ReconciliationClient({ profile, initialData }: { profile: Profile; initialData: SalesData[] }) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [resultMsg, setResultMsg] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
@@ -41,13 +42,14 @@ export default function ReconciliationClient({ profile, initialData }: { profile
             if (res?.error) {
                 setErrorMsg(res.error);
             } else {
-                setResultMsg("AIによる消込処理が完了しました。");
+                setResultMsg("ルールベースの消込処理が完了しました。");
                 // Reset file selections on success
                 setReceiptFile(null);
                 setBankFile(null);
             }
-        } catch (e: any) {
-            setErrorMsg("エラーが発生しました: " + e.message);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "不明なエラー";
+            setErrorMsg("エラーが発生しました: " + message);
         } finally {
             setIsProcessing(false);
         }
@@ -80,10 +82,11 @@ export default function ReconciliationClient({ profile, initialData }: { profile
             if (res?.error) {
                 setErrorMsg(res.error);
             } else {
-                setResultMsg("AIによるデモ消込処理が完了しました。");
+                setResultMsg("ルールベースのデモ消込処理が完了しました。");
             }
-        } catch (e: any) {
-            setErrorMsg("エラーが発生しました: " + e.message);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "不明なエラー";
+            setErrorMsg("エラーが発生しました: " + message);
         } finally {
             setIsProcessing(false);
         }
@@ -116,7 +119,7 @@ export default function ReconciliationClient({ profile, initialData }: { profile
             {/* Main Content */}
             <main className="flex-1 p-10 overflow-auto">
                 <header className="mb-10">
-                    <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">AI自動消込</h1>
+                    <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">自動消込（ルールベース）</h1>
                     <p className="text-gray-500 mt-1 font-medium">請求データと入金データのCSVをアップロードしてください</p>
                 </header>
 
@@ -162,7 +165,7 @@ export default function ReconciliationClient({ profile, initialData }: { profile
                             className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white font-bold py-4 px-12 rounded-full shadow-md transition-transform active:scale-95 flex items-center gap-2"
                         >
                             {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <FileSpreadsheet size={20} />}
-                            {isProcessing ? 'AI解析中...' : 'アップロードしたCSVでAI消込を開始'}
+                            {isProcessing ? '照合中...' : 'アップロードしたCSVで自動消込を開始'}
                         </button>
                         
                         <div className="text-sm font-bold text-gray-400">または</div>
@@ -196,7 +199,7 @@ export default function ReconciliationClient({ profile, initialData }: { profile
                                         <th className="pb-4 whitespace-nowrap text-right pr-8">請求額 (円)</th>
                                         <th className="pb-4 whitespace-nowrap text-right pr-8">入金額 (円)</th>
                                         <th className="pb-4 text-center whitespace-nowrap">ステータス</th>
-                                        <th className="pb-4 whitespace-nowrap">AIコメント</th>
+                                        <th className="pb-4 whitespace-nowrap">コメント</th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-gray-700 font-medium text-sm">
@@ -217,7 +220,7 @@ export default function ReconciliationClient({ profile, initialData }: { profile
                                                 )}
                                                 {data.status === 'inferred' && (
                                                     <span className="inline-flex items-center justify-center min-w-[100px] gap-1 bg-orange-100 text-orange-600 text-xs font-bold px-3 py-1.5 rounded-full">
-                                                        <AlertTriangle size={14} /> AI推論
+                                                        <AlertTriangle size={14} /> 推論候補
                                                     </span>
                                                 )}
                                                 {data.status === 'error' && (

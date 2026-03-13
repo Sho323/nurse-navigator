@@ -1,15 +1,113 @@
-import OpenAI from 'openai';
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { Database } from "@/types/supabase";
+import { hasGrantedAiConsent } from "./consent";
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+type AlertRule = {
+    alertType: string;
+    keywords: string[];
+    missingInfo: string;
+};
 
-// バックグラウンド処理用のSupabaseクライアント（cookiesを使わない）
-const supabaseAdmin = createSupabaseClient(
+type AlertDetection = {
+    alertType: string;
+    matchedKeywords: string[];
+    missingInfo: string;
+};
+
+const ALERT_RULES: AlertRule[] = [
+    {
+        alertType: "特別管理加算",
+        keywords: ["褥瘡", "カテーテル"],
+        missingInfo: "特別管理指導の記録と医師指示書の有無を確認してください。",
+    },
+    {
+        alertType: "緊急訪問看護加算",
+        keywords: ["緊急", "急変", "発熱で呼ばれた"],
+        missingInfo: "緊急対応の発生時刻、連絡経路、訪問実施記録の有無を確認してください。",
+    },
+    {
+        alertType: "深夜早朝加算",
+        keywords: ["深夜", "早朝"],
+        missingInfo: "訪問時刻と算定区分（深夜/早朝）の記録を確認してください。",
+    },
+    {
+        alertType: "ターミナルケア加算",
+        keywords: ["看取り", "ターミナル"],
+        missingInfo: "終末期対応計画、家族説明記録、医師連携記録の有無を確認してください。",
+    },
+    {
+        alertType: "退院時共同指導・退院支援関連加算",
+        keywords: ["退院時", "退院直後", "カンファレンス"],
+        missingInfo: "退院支援会議の参加記録と関係職種連携記録の有無を確認してください。",
+    },
+    {
+        alertType: "リハビリ関連加算",
+        keywords: ["リハビリ", "評価", "計画見直し"],
+        missingInfo: "評価実施記録、計画書更新日、実施頻度の記録を確認してください。",
+    },
+    {
+        alertType: "医療情報連携・体制加算",
+        keywords: ["ケアマネに報告", "サービス担当者会議", "ICT連携", "情報共有"],
+        missingInfo: "連携先・連携手段・実施日を記録できているか確認してください。",
+    },
+    {
+        alertType: "訪問看護遠隔診療補助料",
+        keywords: ["オンライン診療", "カメラ", "同行"],
+        missingInfo: "遠隔診療実施の医師指示、補助内容、実施時刻の記録を確認してください。",
+    },
+];
+
+const NEGATION_PATTERN = /(なし|認めず|認めない|ではない|ありません|なかった|否定|陰性)/;
+
+const supabaseAdmin = createSupabaseClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasPositiveKeyword(text: string, keyword: string) {
+    const pattern = new RegExp(escapeRegExp(keyword), "g");
+    let match = pattern.exec(text);
+
+    while (match) {
+        const start = Math.max(0, match.index - 8);
+        const end = Math.min(text.length, match.index + keyword.length + 8);
+        const windowText = text.slice(start, end);
+        if (!NEGATION_PATTERN.test(windowText)) {
+            return true;
+        }
+        match = pattern.exec(text);
+    }
+
+    return false;
+}
+
+function detectAlerts(textRecord: string): AlertDetection[] {
+    const normalizedText = textRecord.normalize("NFKC");
+    const detections: AlertDetection[] = [];
+
+    for (const rule of ALERT_RULES) {
+        const matchedKeywords = rule.keywords.filter((keyword) => hasPositiveKeyword(normalizedText, keyword));
+        if (matchedKeywords.length === 0) {
+            continue;
+        }
+
+        detections.push({
+            alertType: rule.alertType,
+            matchedKeywords,
+            missingInfo: rule.missingInfo,
+        });
+    }
+
+    return detections;
+}
+
+function buildAlertDescription(detection: AlertDetection) {
+    return `記録内のキーワード「${detection.matchedKeywords.join(" / ")}」から ${detection.alertType} の可能性があります。\n\n【不足情報・確認事項】\n${detection.missingInfo}`;
+}
 
 export async function checkBillingRules({
     textRecord,
@@ -24,101 +122,92 @@ export async function checkBillingRules({
     visitRecordId: string;
     nurseId: string;
 }) {
-    if (!textRecord || !process.env.OPENAI_API_KEY) {
-        return; // Skip if no text or no key
-    }
-
-    // M0 Hotfix: PII保護のための送信ブロック
-    if (process.env.COMPLIANCE_ENFORCED === "true") {
-        console.warn(`[COMPLIANCE_ENFORCED] 警告: PII保護のため訪問記録(textRecord)のOpenAI送信をブロックしました。 (tenantId: ${tenantId}, visitRecordId: ${visitRecordId})`);
+    if (!textRecord) {
         return;
     }
 
     try {
-        const prompt = `
-あなたは訪問看護ステーションの優秀な医療事務・レセプトチェッカー（AIアシスタント）です。
-以下の訪問スタッフ（看護師、理学療法士（PT）、作業療法士（OT）、言語聴覚士（ST）、またはケアマネージャー等）の訪問記録や連携記録を読み、**診療報酬改定2026（令和8年度）にも対応した特別な加算** の対象となる可能性がないか判定してください。
-
-記録から以下のようなキーワードが見つかった場合、アラートを生成します：
-【看護系】
-- 「褥瘡」「カテーテル」（特別管理加算の可能性）
-- 「緊急」「急変」「発熱で呼ばれた」（緊急訪問看護加算の可能性）
-- 「深夜」「早朝」（深夜早朝加算の可能性）
-- 「看取り」「ターミナル」（ターミナルケア加算の可能性）
-
-【リハビリ・連携系】
-- 「退院時」「退院直後」「カンファレンス」（退院時共同指導加算、退院支援指導加算の可能性）
-- 「リハビリ」「評価」「計画見直し」（リハビリテーション関連加算、または複数名訪問の可能性）
-- 「ケアマネに報告」「サービス担当者会議」「ICT連携」「情報共有」（連携体制加算、訪問看護医療情報連携加算の可能性）
-- 「オンライン診療」「カメラ」「同行」（訪問看護遠隔診療補助料の可能性）
-
-その他、医療保険や介護保険の特別加算の対象になりそうな重要なワードがあれば反応してください。
-
-アラートが必要な場合は、加算の要件を満たすために**現在不足している情報や確認すべきこと（カルテの記載漏れ、医師の指示書の有無、ケアマネとの共有記録の有無、同意書の有無など）** も必ず指摘してください。これにより、他職種間での「書き忘れ」や「連携漏れ」を防ぎます。
-
-アラートが必要な場合は、以下の形式のJSONでのみ返答してください。
-{
-    "has_alert": true,
-    "alert_type": "特別管理加算など、該当しそうな加算名",
-    "description": "加算の対象となる可能性がある理由を1〜2文で完結に説明してください。",
-    "missing_info": "加算を取得するために現在不足している情報や、他職種に確認・記載依頼すべき事項（例：『医師の指示書の有無が不明です』『ケアマネ宛の報告書の送付記録が必要です』等）。"
-}
-
-アラートが不要な場合は、以下の形式のJSONでのみ返答してください。
-{
-    "has_alert": false
-}
-
-訪問記録:
-"${textRecord}"
-`;
-
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-            temperature: 0,
+        const consentCheck = await hasGrantedAiConsent({
+            supabase: supabaseAdmin,
+            tenantId,
+            patientId,
         });
 
-        const resultJson = response.choices[0].message.content;
-        if (!resultJson) return;
-
-        const result = JSON.parse(resultJson);
-
-        if (result.has_alert) {
-            // 不足情報のテキストを組み立てる
-            const finalDescription = result.missing_info 
-                ? `${result.description}\n\n【不足情報・確認事項】\n${result.missing_info}` 
-                : result.description;
-
-            // データベースにAIアラートを記録
-            // 1. ai_alertsテーブルに記録
-            const { error: alertError } = await supabaseAdmin
-                .from("ai_alerts")
-                .insert({
-                    tenant_id: tenantId,
-                    visit_record_id: visitRecordId,
-                    alert_type: result.alert_type,
-                    description: finalDescription,
-                    is_resolved: false,
-                });
-
-            if (alertError) {
-                console.error("Error inserting AI alert:", alertError);
-            }
-
-            // 2. messagesテーブルにシステム通知として送信
-            const systemContent = `【AIレセプト・アラート】\n加算候補: ${result.alert_type}\n\n${finalDescription}\n\n（担当者は該当の加算要件が満たされているか確認してください）`;
-            
-            await supabaseAdmin.from("messages").insert({
-                tenant_id: tenantId,
-                sender_id: nurseId,
-                patient_id: patientId,
-                content: systemContent,
-                is_system_alert: true,
-            });
+        if (consentCheck.error) {
+            console.error(
+                `[CONSENT_GUARD] 同意情報の取得に失敗したためアラート判定を中止しました。 tenantId=${tenantId} patientId=${patientId}`,
+                consentCheck.error
+            );
+            return;
         }
-    } catch (e) {
-        console.error("Error analyzing record with AI:", e);
+
+        if (!consentCheck.granted) {
+            console.warn(
+                `[CONSENT_GUARD] AI同意未取得のため加算アラート判定をスキップしました。 tenantId=${tenantId} patientId=${patientId} visitRecordId=${visitRecordId}`
+            );
+            return;
+        }
+
+        if (process.env.COMPLIANCE_ENFORCED === "true") {
+            console.info(
+                `[COMPLIANCE_ENFORCED] 外部AIは使用せず、ローカルルールで加算アラート判定を実行します。 tenantId=${tenantId} visitRecordId=${visitRecordId}`
+            );
+        }
+
+        const detections = detectAlerts(textRecord);
+        if (detections.length === 0) {
+            return;
+        }
+
+        const { data: existingAlerts, error: existingAlertError } = await supabaseAdmin
+            .from("ai_alerts")
+            .select("alert_type")
+            .eq("tenant_id", tenantId)
+            .eq("visit_record_id", visitRecordId);
+
+        if (existingAlertError) {
+            console.error("Failed to read existing alerts:", existingAlertError);
+            return;
+        }
+
+        const existingTypes = new Set((existingAlerts ?? []).map((alert) => alert.alert_type));
+        const newDetections = detections.filter((detection) => !existingTypes.has(detection.alertType));
+        if (newDetections.length === 0) {
+            return;
+        }
+
+        const insertPayload = newDetections.map((detection) => ({
+            tenant_id: tenantId,
+            visit_record_id: visitRecordId,
+            alert_type: detection.alertType,
+            description: buildAlertDescription(detection),
+            is_resolved: false,
+        }));
+
+        const { error: insertAlertError } = await supabaseAdmin.from("ai_alerts").insert(insertPayload);
+        if (insertAlertError) {
+            console.error("Error inserting rule-based alerts:", insertAlertError);
+            return;
+        }
+
+        const systemContent = [
+            "【加算ルールアラート】",
+            ...newDetections.map(
+                (detection, index) =>
+                    `${index + 1}. ${detection.alertType}（検知: ${detection.matchedKeywords.join(" / ")}）\n${detection.missingInfo}`
+            ),
+            "",
+            "（本通知は外部AIではなくキーワードルールで生成されています）",
+        ].join("\n");
+
+        await supabaseAdmin.from("messages").insert({
+            tenant_id: tenantId,
+            sender_id: nurseId,
+            patient_id: patientId,
+            content: systemContent,
+            is_system_alert: true,
+        });
+    } catch (error) {
+        console.error("Rule-based alert generation error:", error);
     }
 }

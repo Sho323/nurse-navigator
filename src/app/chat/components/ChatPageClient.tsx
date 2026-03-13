@@ -1,6 +1,6 @@
 "use client";
 
-import { Send, Image as ImageIcon, Menu, Search, AlertCircle, ArrowLeft, Home, MessageSquare, Calendar, LayoutDashboard, FileSpreadsheet, Lock, Users, LogOut, X } from "lucide-react";
+import { Send, Image as ImageIcon, Menu, Search, AlertCircle, ArrowLeft, Home, MessageSquare, Calendar, LayoutDashboard, FileSpreadsheet, Users, LogOut, X } from "lucide-react";
 import Link from 'next/link';
 import { Database } from "@/types/supabase";
 import { useEffect, useState, useRef } from "react";
@@ -11,8 +11,9 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { Mic } from "lucide-react";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
+type SenderProfile = Pick<Database["public"]["Tables"]["profiles"]["Row"], "name" | "role">;
 type Message = Database['public']['Tables']['messages']['Row'] & {
-    sender?: { name: string, role: string } | null;
+    sender?: SenderProfile | null;
 };
 type Patient = Database['public']['Tables']['patients']['Row'];
 
@@ -20,9 +21,10 @@ interface ChatPageClientProps {
     profile: Profile;
     initialMessages: Message[];
     patients: Patient[];
+    aiConsentByPatientId: Record<string, boolean>;
 }
 
-export default function ChatPageClient({ profile, initialMessages, patients }: ChatPageClientProps) {
+export default function ChatPageClient({ profile, initialMessages, patients, aiConsentByPatientId }: ChatPageClientProps) {
     const [messages, setMessages] = useState<Message[]>(initialMessages);
     const [newMessage, setNewMessage] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,11 +49,7 @@ export default function ChatPageClient({ profile, initialMessages, patients }: C
     // 音声入力があった場合にnewMessageに反映
     useEffect(() => {
         if (transcript) {
-            setNewMessage((prev) => {
-                // 前回までの手入力に、新しい音声認識の文字列をくっつける（重複を避けるためのシンプルな実装例）
-                // 本来ならより複雑なマージ操作が必要ですが、MVPとして上書き＋追記で対応
-                return transcript;
-            });
+            setNewMessage(transcript);
         }
     }, [transcript]);
 
@@ -102,7 +100,7 @@ export default function ChatPageClient({ profile, initialMessages, patients }: C
                         .single();
 
                     if (senderData) {
-                        newMsg.sender = senderData as any;
+                        newMsg.sender = senderData as SenderProfile;
                     }
 
                     // 新しいメッセージを既存の配列の最後に追加
@@ -195,6 +193,7 @@ export default function ChatPageClient({ profile, initialMessages, patients }: C
         if (!selectedPatientId) return false; 
         return msg.patient_id === selectedPatientId;
     });
+    const selectedPatientHasAiConsent = selectedPatientId ? Boolean(aiConsentByPatientId[selectedPatientId]) : false;
 
     return (
         <div className="bg-[#FFFAF0] min-h-screen font-sans flex flex-col md:flex-row">
@@ -265,6 +264,9 @@ export default function ChatPageClient({ profile, initialMessages, patients }: C
                                 {patient.name} 様 スレッド
                             </h3>
                             <p className="text-sm text-gray-400 truncate">{patient.care_level} / {patient.insurance_type}</p>
+                            <span className={`inline-flex mt-2 px-2 py-1 rounded-full text-[10px] font-bold ${aiConsentByPatientId[patient.id] ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                                {aiConsentByPatientId[patient.id] ? "AI同意: 取得済み" : "AI同意: 未取得"}
+                            </span>
                         </div>
                     ))}
                 </div>
@@ -331,13 +333,13 @@ export default function ChatPageClient({ profile, initialMessages, patients }: C
                         filteredMessages.map((msg) => {
                         const isMine = msg.sender_id === profile.id;
 
-                        // AIアラート（システム通知）の場合
+                        // 加算アラート（システム通知）の場合
                         if (msg.is_system_alert) {
                             return (
                                 <div key={msg.id} className="flex justify-center my-4">
                                     <div className="bg-orange-50 border border-orange-200 p-4 rounded-3xl shadow-sm max-w-[90%] text-center">
                                         <span className="flex justify-center items-center gap-1 text-orange-600 font-bold mb-2">
-                                            <AlertCircle size={18} /> AI 加算アラート
+                                            <AlertCircle size={18} /> 加算アラート
                                         </span>
                                         <p className="text-sm text-orange-800 font-medium leading-relaxed">
                                             {msg.content}
@@ -387,6 +389,19 @@ export default function ChatPageClient({ profile, initialMessages, patients }: C
 
                 {/* Input Area */}
                 <div className="bg-white p-4 border-t border-gray-100 sticky bottom-0 z-10 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+                    {selectedPatientId && !selectedPatientHasAiConsent && (
+                        <div className="mb-3 bg-red-50 border border-red-200 rounded-2xl p-3">
+                            <p className="text-xs font-bold text-red-700">
+                                この利用者はAI同意が未取得です。AI加算チェックは実行されません。
+                            </p>
+                            <Link
+                                href={`/patient/${selectedPatientId}`}
+                                className="text-xs font-bold text-red-600 underline mt-1 inline-block"
+                            >
+                                同意状態を確認する
+                            </Link>
+                        </div>
+                    )}
                     {photoPreview && (
                         <div className="mb-3 pl-14 relative w-24 h-24">
                             <img src={photoPreview} alt="preview" className="rounded-xl w-full h-full object-cover border border-gray-200" />

@@ -4,6 +4,20 @@
 
 ---
 
+## 実装状況（2026-03-13）
+
+- [x] `M0-HOT` 初回実装: `src/utils/ai.ts` は患者マスタ照合 + 直接識別子の簡易マスクを通し、`ALLOW_UNSANITIZED_AI_RECORDS=true` でない限りPII検知時はOpenAI送信を拒否するよう変更。
+- [x] `M0-HOT` 初回実装: `src/app/admin/reconciliation/actions.ts` は請求CSV/銀行CSVの氏名系カラムを `[患者A]` 形式でマスクしてからOpenAIへ送信するよう変更。
+- [x] `GOV-001` 初回実装: `src/utils/supabase/api.ts` の「profile欠落時のadmin化」「既存profileのadmin強制上書き」を撤去し、adminページとadmin系Server Actionに実権限チェックを追加。
+- [x] 権限確認対象の画面を実コードに反映:
+  `/admin/dashboard`, `/admin/reconciliation`, `/admin/alerts`, `/nurse`, `/nurse/plan`, `/chat`, `/patient/[id]`, `/rehab`, `/rehab/plan`
+- [x] `PII-002` 初回実装: `src/utils/ai.ts` の氏名検知を「対象患者1名」から「テナント患者マスタDB照合（name/kana_name）」へ拡張し、電話番号・郵便番号・生年月日は正規表現で検知。
+- [x] `CONS-000` 初回実装: 同意取得フロー設計を `docs/governance/consent_flow_design.md` として明文化し、`consents / consent_events` テーブル + 最小RLS、`/patient/[id]`・`/chat`・`src/utils/ai.ts` の反映ポイントを実装。
+- [x] 安全性強化: OpenAI依存を停止し、`src/app/admin/reconciliation/actions.ts`（CSV消込）と `src/utils/ai.ts`（加算アラート）をルールベース判定へ置換。
+- [ ] `AUD-002`, `IAM-005`, `VND-004` は別フェーズで継続
+
+---
+
 ## 総評
 
 **計画の方向性は正しく、構造もよく整理されています。** ただしコードベースの現状と照合すると、いくつかの「抜け」「順序問題」「リスク過小評価」があります。以下に問題点と修正案を示します。

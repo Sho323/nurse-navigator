@@ -1,23 +1,20 @@
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { getUserProfile } from "@/utils/supabase/api";
-import { redirect } from "next/navigation";
-import { LayoutDashboard, FileSpreadsheet, Settings, Users, Bell, Search, AlertCircle, ArrowUpRight } from "lucide-react";
+import { requireAdminProfile } from "@/utils/supabase/authorization";
+import { Database } from "@/types/supabase";
+import { LayoutDashboard, FileSpreadsheet, Users, AlertCircle, ArrowUpRight } from "lucide-react";
 import DashboardHeader from "./components/DashboardHeader";
 import AlertToggle from "../components/AlertToggle";
 import Link from "next/link";
 
+type AlertRecord = Database["public"]["Tables"]["ai_alerts"]["Row"] & {
+    visit_record?: {
+        patient?: { name: string } | { name: string }[] | null;
+    } | null;
+};
+
 export default async function AdminDashboardPage() {
-    const profile = await getUserProfile();
-    
-    if (!profile || profile.role !== 'admin') {
-        // For testing purposes, we might allow nurse to see dashboard if we want,
-        // but let's stick to redirecting if they aren't admin. Wait, the demo 
-        // user is "山田 看護師" which is a nurse... 
-        // For MVP demo, lets allow anyone or change the user's role to admin if we want.
-        // I will just fetch data based on tenant.
-        if (!profile) redirect("/login");
-    }
+    const profile = await requireAdminProfile();
 
     const supabase = await createClient();
 
@@ -163,7 +160,7 @@ export default async function AdminDashboardPage() {
 
                         <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-2">
                             {alerts && alerts.length > 0 ? (
-                                alerts.map((alert: any) => (
+                                (alerts as AlertRecord[]).map((alert) => (
                                     <div key={alert.id} className="bg-white p-4 rounded-2xl shadow-sm border border-orange-100">
                                         <div className="flex justify-between items-start mb-2">
                                             <span className="font-bold text-gray-800">

@@ -1,24 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, User, Stethoscope, FileText, Link as LinkIcon, AlertTriangle, PhoneCall, Calendar as CalIcon, Edit3, CheckCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, User, Stethoscope, Link as LinkIcon, AlertTriangle, PhoneCall, Calendar as CalIcon, Edit3, CheckCircle, Loader2 } from "lucide-react";
 import { Database } from "@/types/supabase";
-import Link from "next/link";
-import { updatePatientProfile } from "../../actions";
+import { recordAiConsent, updatePatientProfile } from "../../actions";
 import { useRouter } from "next/navigation";
+import { ConsentedByKind } from "@/utils/consent";
 
 type Patient = Database['public']['Tables']['patients']['Row'];
-type Profile = Database['public']['Tables']['profiles']['Row'];
+type Consent = Database["public"]["Tables"]["consents"]["Row"];
+type ConsentEvent = Database["public"]["Tables"]["consent_events"]["Row"];
 
 interface Props {
     patient: Patient;
-    profile: Profile;
+    aiConsent: Consent | null;
+    consentEvents: ConsentEvent[];
 }
 
-export default function PatientProfileClient({ patient, profile }: Props) {
+export default function PatientProfileClient({ patient, aiConsent, consentEvents }: Props) {
     const router = useRouter();
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isUpdatingConsent, setIsUpdatingConsent] = useState(false);
+    const [consentActor, setConsentActor] = useState<ConsentedByKind>("patient");
+    const [consentNotes, setConsentNotes] = useState("");
     
     // Form State
     const [formData, setFormData] = useState({
@@ -58,6 +63,38 @@ export default function PatientProfileClient({ patient, profile }: Props) {
         setIsSaving(false);
     };
 
+    const consentLabel =
+        aiConsent?.status === "granted"
+            ? "同意取得済み"
+            : aiConsent?.status === "revoked"
+              ? "撤回済み"
+              : "未取得";
+
+    const consentClassName =
+        aiConsent?.status === "granted"
+            ? "bg-green-100 text-green-700"
+            : aiConsent?.status === "revoked"
+              ? "bg-red-100 text-red-700"
+              : "bg-gray-100 text-gray-600";
+
+    const handleConsentUpdate = async (status: "granted" | "revoked") => {
+        setIsUpdatingConsent(true);
+        const result = await recordAiConsent({
+            patientId: patient.id,
+            status,
+            consentedByKind: consentActor,
+            notes: consentNotes || undefined,
+        });
+
+        if (result?.error) {
+            alert(result.error);
+        } else {
+            setConsentNotes("");
+            router.refresh();
+        }
+        setIsUpdatingConsent(false);
+    };
+
     return (
         <div className="bg-[#FFFAF0] min-h-screen font-sans pb-24 flex flex-col items-center">
             {/* Header */}
@@ -76,6 +113,77 @@ export default function PatientProfileClient({ patient, profile }: Props) {
             </header>
 
             <main className="w-full max-w-2xl px-6 mt-8 space-y-6">
+                <section className="bg-white p-6 rounded-3xl shadow-sm border border-orange-100">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-bold text-gray-500">AI利用同意（CONS-000）</h2>
+                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${consentClassName}`}>
+                            {consentLabel}
+                        </span>
+                    </div>
+
+                    <p className="text-xs text-gray-500 mb-4">
+                        AI加算チェックの実行には本同意が必要です。撤回すると次回以降のAI送信は停止されます。
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                        <select
+                            value={consentActor}
+                            onChange={(event) => setConsentActor(event.target.value as ConsentedByKind)}
+                            className="border border-gray-200 rounded-xl p-3 text-sm font-medium bg-gray-50"
+                            disabled={isUpdatingConsent}
+                        >
+                            <option value="patient">本人同意</option>
+                            <option value="representative">代理人同意</option>
+                            <option value="staff">スタッフ記録</option>
+                        </select>
+                        <input
+                            value={consentNotes}
+                            onChange={(event) => setConsentNotes(event.target.value)}
+                            placeholder="補足メモ（任意）"
+                            className="border border-gray-200 rounded-xl p-3 text-sm font-medium bg-gray-50"
+                            disabled={isUpdatingConsent}
+                        />
+                    </div>
+
+                    <div className="flex gap-3 mb-4">
+                        <button
+                            onClick={() => handleConsentUpdate("granted")}
+                            disabled={isUpdatingConsent}
+                            className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-bold py-3 rounded-xl transition-colors"
+                        >
+                            同意を記録
+                        </button>
+                        <button
+                            onClick={() => handleConsentUpdate("revoked")}
+                            disabled={isUpdatingConsent}
+                            className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white font-bold py-3 rounded-xl transition-colors"
+                        >
+                            撤回を記録
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-4">
+                        <p className="text-xs font-bold text-gray-400 mb-2">直近履歴（最大5件）</p>
+                        {consentEvents.length === 0 ? (
+                            <p className="text-sm text-gray-400">履歴はまだありません。</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {consentEvents.map((event) => (
+                                    <div key={event.id} className="bg-gray-50 rounded-xl p-3 text-sm">
+                                        <p className="font-bold text-gray-700">
+                                            {event.action === "grant" ? "同意取得" : event.action === "revoke" ? "同意撤回" : "同意更新"}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            {new Date(event.created_at).toLocaleString("ja-JP")} / {event.consented_by_kind || "未設定"}
+                                        </p>
+                                        {event.notes && <p className="text-xs text-gray-600 mt-1">{event.notes}</p>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </section>
+
                 {/* Basic Info Group */}
                 <section className="bg-white p-6 rounded-3xl shadow-sm border border-orange-50">
                     <h2 className="text-sm font-bold text-gray-400 flex items-center gap-2 mb-4">

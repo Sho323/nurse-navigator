@@ -1,18 +1,23 @@
-import { createClient } from "@/utils/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { getUserProfile } from "@/utils/supabase/api";
-import { redirect } from "next/navigation";
-import { LayoutDashboard, FileSpreadsheet, Users, Bell, AlertCircle, CheckCircle2, Search, ArrowLeft } from "lucide-react";
+import { requireAdminProfile } from "@/utils/supabase/authorization";
+import { Database } from "@/types/supabase";
+import { LayoutDashboard, FileSpreadsheet, Users, AlertCircle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import DashboardHeader from "../dashboard/components/DashboardHeader";
 import AlertToggle from "../components/AlertToggle";
 
+type AlertRecord = Database["public"]["Tables"]["ai_alerts"]["Row"] & {
+    visit_record?: {
+        visit_type?: string | null;
+        temperature?: number | null;
+        blood_pressure?: string | null;
+        text_record?: string | null;
+        patient?: { name: string } | { name: string }[] | null;
+    } | null;
+};
+
 export default async function AdminAlertsPage() {
-    const profile = await getUserProfile();
-    
-    // In our demo setup, we treat everyone visiting this page as if they should see it,
-    // or we redirect based on presence of a profile.
-    if (!profile) redirect("/login");
+    const profile = await requireAdminProfile();
 
     const supabaseAdmin = createSupabaseClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -75,7 +80,7 @@ export default async function AdminAlertsPage() {
                         加算取得・確認アラート一覧
                     </h2>
                     <p className="text-gray-500 mt-2 text-sm font-medium">
-                        AIが訪問記録を解析し、2026年診療報酬改定の要件に基づく「算定できそうな加算」と「不足している情報」を一覧化しています。
+                        訪問記録をルールベースで判定し、2026年診療報酬改定の要件に基づく「算定できそうな加算」と「不足している情報」を一覧化しています。
                     </p>
                 </div>
 
@@ -89,7 +94,7 @@ export default async function AdminAlertsPage() {
 
                     <div className="flex flex-col">
                         {alerts && alerts.length > 0 ? (
-                            alerts.map((alert: any) => {
+                            (alerts as AlertRecord[]).map((alert) => {
                                 const patientName = Array.isArray(alert.visit_record?.patient) 
                                     ? alert.visit_record?.patient[0]?.name 
                                     : alert.visit_record?.patient?.name || "不明な利用者";
